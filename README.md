@@ -1,6 +1,6 @@
 # repo-circuit
 
-GitHub を**配線図**で見て・触って・覚える、自作ツール別の課題管理 Web アプリ（ローカル専用・port 8014）。
+GitHub を**配線図**で見て・触って・覚える、自作ツール別の課題管理 Web アプリ（ローカル専用・port 8017）。
 
 - **配電盤**: 全ツールを1行ずつ。赤いランプ・錆びた配線・本番の遅れがある回路が上に来る
 - **回路図**: 1ツールの配線図。部品を押すと解説とできる操作が出る。スイッチを閉じると電気が本番まで流れる
@@ -16,7 +16,7 @@ GitHub を**配線図**で見て・触って・覚える、自作ツール別の
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 copy .env.example .env   # GITHUB_TOKEN と BASIC_AUTH_PASSWORD を記入
-.venv\Scripts\python -m uvicorn app.main:app --port 8014 --env-file .env
+.venv\Scripts\python -m uvicorn app.main:app --port 8017 --env-file .env
 ```
 
 `GITHUB_TOKEN` が空なら**デモモード**（サンプルの回路。書き込みはメモリ上の擬似実行）で動く。
@@ -25,7 +25,7 @@ copy .env.example .env   # GITHUB_TOKEN と BASIC_AUTH_PASSWORD を記入
 ## AI（Claude / Codex）からの起票
 
 ```http
-POST http://localhost:8014/api/issues
+POST http://localhost:8017/api/issues
 Content-Type: application/json
 Authorization: Basic ...
 
@@ -54,7 +54,7 @@ Authorization: Basic ...
 2. **稼働クローン**: `git clone https://github.com/h-takaha/repo-circuit C:\lab\run\repo-circuit`
 3. **venv**: `C:\lab\git\agent-ops\setup\phase3\setup-tool-venv.ps1` で `C:\lab\run\repo-circuit\.venv` を作る
 4. **.env**: `C:\lab\run\repo-circuit\.env` に PAT と Basic 認証値（画面・ログ・コミットに出さない）
-5. **server_manager**: server-manager repo の `tools.json` に `repo_circuit`（port 8014、`uvicorn app.main:app --port 8014 --env-file .env`）を追加（PR 経由）
+5. **server_manager**: server-manager repo の `tools.json` に `repo_circuit`（port 8017。8014 は task_manager、8015 も使用中、`uvicorn app.main:app --port 8017 --env-file .env`）を追加（PR 経由）
 6. **自動デプロイ（任意）**: agent-ops の `automation/config/autodeploy.json` に
    `"repo-circuit": { "restart": "server-manager", "serverManagerName": "repo_circuit" }`
 7. **AI 起票 skill**: agent-ops で `node deploy.js --diff` → 内容確認 → `node deploy.js --apply --force`
