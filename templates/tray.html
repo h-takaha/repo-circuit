@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}部品トレイ · repo-circuit{% endblock %}
+{% block content %}
+<div class="twrap">
+  <section style="flex-grow:1;display:flex;flex-direction:column;gap:14px;min-width:0">
+    <div>
+      <h1>部品トレイ</h1>
+      <p class="lead">「直したい」と思ったことを付箋（IC チップ）にして置いておく場所。分岐に差し込むと「配線中」、スイッチが閉じると自動で「完了」に移ります。</p>
+    </div>
+    <form method="get" action="/tray" style="display:flex;gap:8px;align-items:center">
+      <label class="lab" for="filter">表示</label>
+      <select id="filter" name="repo" class="inp" style="width:auto" onchange="this.form.submit()">
+        <option value="">すべてのツール</option>
+        {% for n in names %}<option value="{{ n }}" {{ 'selected' if n == repo_filter }}>{{ n }}</option>{% endfor %}
+      </select>
+      <noscript><button class="btn ghost">絞り込む</button></noscript>
+    </form>
+    <div class="tcols">
+      {% for key, name, hint in [('unwired','未接続','どの分岐にもつながっていない（未着手）'), ('wired','配線中','分岐に差し込まれ、修正中（対応中）'), ('done','完了','スイッチが閉じて合流した（クローズ）')] %}
+      <div class="tcol">
+        <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:17px;font-weight:700">{{ name }}</span><span class="mono cap" style="font-size:14px">{{ cols[key]|length }}</span></div>
+        <div class="cap" style="margin-top:-6px">{{ hint }}</div>
+        {% for c in cols[key] %}
+        <a class="chip {{ key }}" href="/repo/{{ c.issue.repo }}?sel=issue:{{ c.issue.number }}">
+          <div class="mono" style="font-size:12px;font-weight:600">#{{ c.issue.number }} <span style="opacity:.75">· {{ c.issue.repo }}</span></div>
+          <div style="font-size:14px;font-weight:500;line-height:1.45">{{ c.issue.title }}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            <span class="tag {{ c.issue.kind }}">{{ kinds[c.issue.kind] }}</span>
+            <span class="tag pri">{{ priorities[c.issue.priority] }}</span>
+            {% if c.note %}<span style="font-size:12px;opacity:.85">{{ c.note }}</span>{% endif %}
+          </div>
+        </a>
+        {% else %}<p class="cap">ありません</p>{% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <form class="card tform" method="post" action="/tray">
+    <h2>付箋を貼る</h2>
+    <p class="cap" style="margin:-4px 0 0;line-height:1.6">GitHub では、選んだツールの repo に Issue が作られます（ラベル feedback）。Claude / Codex に「○○の△△を直したい」と話しかけても、同じ場所に貼られます。</p>
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <div class="field"><label for="repo">どのツール？</label>
+      <select id="repo" name="repo" class="inp" required>
+        {% for n in names %}<option value="{{ n }}" {{ 'selected' if n == (form.repo or repo_filter) }}>{{ n }}</option>{% endfor %}
+      </select></div>
+    <div class="field"><label for="title">ひとことで（タイトル）</label>
+      <input id="title" name="title" class="inp" required value="{{ form.title or '' }}" placeholder="例: 保存ボタンが見つけにくい"></div>
+    <div class="field"><label for="situation">気づいた状況</label>
+      <textarea id="situation" name="situation" class="inp" rows="3" placeholder="何をしていて、何が起きたか">{{ form.situation or '' }}</textarea></div>
+    <div class="field"><label for="want">どうなってほしいか</label>
+      <textarea id="want" name="want" class="inp" rows="2">{{ form.want or '' }}</textarea></div>
+    <div class="lab">種類</div>
+    <div class="pills">
+      {% for k, label in kinds.items() %}<input type="radio" name="kind" id="k-{{ k }}" value="{{ k }}" {{ 'checked' if k == (form.kind or 'improvement') }}><label for="k-{{ k }}">{{ label }}</label>{% endfor %}
+    </div>
+    <div class="lab">急ぎ度</div>
+    <div class="pills">
+      {% for k, label in priorities.items() %}<input type="radio" name="priority" id="p-{{ k }}" value="{{ k }}" {{ 'checked' if k == (form.priority or 'p2') }}><label for="p-{{ k }}">{{ label }}</label>{% endfor %}
+    </div>
+    <button class="btn" type="submit" style="min-height:48px">付箋を貼る（Issue を作成）</button>
+    {% if result %}
+      {% if result.ok %}
+      <div class="flash ok"><b>{{ result.message }}</b>（未接続の列）
+        {% if result.url %}<div><a href="{{ result.url }}" target="_blank" rel="noopener">GitHub で見る ↗</a></div>{% endif %}
+        <details><summary>コマンドで言うと</summary><code class="cmd">{{ result.cmd }}</code></details>
+      </div>
+      {% elif result.tripped %}
+        {% for v in result.verdicts if v.level == 'trip' %}
+        <div class="flash ng"><b>ブレーカーが落ちました: {{ v.rule }}</b>
+          <p style="margin:6px 0 0">{{ v.why }}</p>
+          {% if v.steps %}<p style="margin:6px 0 0"><b>代わりに:</b> {{ v.steps|join(' / ') }}</p>{% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+      <div class="flash ng">{{ result.message }}</div>
+      {% endif %}
+    {% endif %}
+  </form>
+</div>
+{% endblock %}

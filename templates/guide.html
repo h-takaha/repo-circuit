@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}凡例 · repo-circuit{% endblock %}
+{% block content %}
+<div>
+  <h1>凡例 — 回路記号と GitHub の対応</h1>
+  <p class="lead">覚えるのは1つだけ: <b>電気が本番ランプまで流れる＝あなたの変更が本番のツールに届く</b>。</p>
+</div>
+<div class="card flowline">
+  <div class="step"><span class="stepn">1</span><span class="nm">付箋を貼る</span><span class="ds">「直したい」を IC チップにする<br>= Issue 作成</span></div>
+  <div class="step"><span class="stepn">2</span><span class="nm">分岐を引く</span><span class="ds">幹線から作業用の配線を出す<br>= ブランチ作成</span></div>
+  <div class="step"><span class="stepn">3</span><span class="nm">はんだ付け</span><span class="ds">作業台で直して記録し、GitHub へ送る<br>= コミット・push</span></div>
+  <div class="step"><span class="stepn">4</span><span class="nm">スイッチを付ける</span><span class="ds">「幹線に入れて」と依頼する<br>= プルリクエスト</span></div>
+  <div class="step"><span class="stepn">5</span><span class="nm">ランプを見る</span><span class="ds">自動検査が緑になるのを待つ<br>= CI</span></div>
+  <div class="step"><span class="stepn">6</span><span class="nm">スイッチを閉じる</span><span class="ds">通電・付箋が自動で完了<br>= マージ</span></div>
+</div>
+
+<section class="card" style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
+  <span class="nm">作業台・GitHub・本番 — 1つのツールには3つの置き場がある</span>
+  <svg viewBox="0 0 900 120" style="width:100%;max-width:900px;height:auto" role="img" aria-label="作業台から GitHub、GitHub から本番へ変更が流れる図">
+    <rect x="10" y="30" width="220" height="60" rx="8" class="w" style="stroke:var(--blue)"></rect>
+    <text x="120" y="56" class="lbl mid">作業台（開発リポジトリ）</text><text x="120" y="76" class="lblm mid">C:\lab\git\&lt;tool&gt;</text>
+    <path class="w" d="M230 60H330"></path><text x="280" y="50" class="lblm mid">push</text>
+    <rect x="340" y="30" width="220" height="60" rx="8" class="w" style="stroke:var(--copper)"></rect>
+    <text x="450" y="56" class="lbl mid">GitHub（幹線の正本）</text><text x="450" y="76" class="lblm mid">origin/main</text>
+    <path class="w" d="M560 60H660"></path><text x="610" y="50" class="lblm mid">自動デプロイ</text>
+    <rect x="670" y="30" width="220" height="60" rx="8" class="w"></rect>
+    <text x="780" y="56" class="lbl mid">本番（稼働クローン）</text><text x="780" y="76" class="lblm mid">C:\lab\run\&lt;tool&gt;</text>
+  </svg>
+  <span class="ds">回路図の幹線は GitHub の main です。その上に立つ2本の旗が、<b>作業台</b>（まだ送っていない変更＝点線）と<b>本番はここまで</b>（本番に届いている位置）を示します。このアプリは作業台と本番を読むだけで、書き込みません。</span>
+</section>
+
+<div class="legend">
+  <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="bus" d="M8 24H88"></path></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">幹線</span><span class="gh">main / 本線</span></div><div class="ds">全員の土台。右端が本番につながる。直接はんだ付けはしない。</div></div></div>
+  <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="bus" d="M8 12H88"></path><path class="w" d="M20 12V36H76V12"></path></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">分岐配線</span><span class="gh">ブランチ</span></div><div class="ds">幹線から引き出した作業用の配線。何をしても本番には影響しない。</div></div></div>
+  <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="w" d="M8 24H88"></path><circle class="commit" cx="32" cy="24" r="6"></circle><circle class="commit" cx="64" cy="24" r="6"></circle></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">はんだ点</span><span class="gh">コミット</span></div><div class="ds">変更を記録したセーブポイント。消えない。いつでも戻れる。</div></div></div>
+  <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="w" d="M4 24H92"></path><rect x="24" y="12" width="48" height="24" rx="3" class="chipr"></rect><text x="48" y="29" class="chiptxt">#12</text></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">IC チップ（付箋）</span><span class="gh">Issue</span></div><div class="ds">「直したい」メモ。トレイにあれば未着手、分岐に刺さっていれば対応中。</div></div></div>
+  <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="w" d="M4 30H36M60 30H92"></path><circle class="contact" cx="36" cy="30" r="4"></circle><line x1="36" y1="30" x2="56" y2="14" class="blade"></line><circle class="contact" cx="60" cy="30" r="4"></circle></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">スイッチ</span><span class="gh">プルリクエスト / マージ</span></div><div class="ds">開いている＝合流の依頼中。閉じる＝マージ。閉じると幹線に電気が流れる。</div></div></div>
+  <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><circle class="led-g" cx="24" cy="24" r="9"></circle><circle class="led-y" cx="48" cy="24" r="9"></circle><circle class="led-r" cx="72" cy="24" r="9"></circle></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">検査ランプ</span><span class="gh">CI（自動チェック）</span></div><div class="ds">緑=合格、黄=検査中、赤=失敗。赤と黄のスイッチは閉じられない。</div></div></div>
+  <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="bus" d="M4 24H26"></path><circle class="lamp on" cx="48" cy="24" r="18"></circle><path class="fil" d="M38 14L58 34M58 14L38 34"></path></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">本番ランプ</span><span class="gh">デプロイ先 C:\lab\run</span></div><div class="ds">いま動いているツール。自動デプロイ対象は、合流すると数分で更新される。</div></div></div>
+  <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="bus" d="M4 30H92"></path><path class="mark-run" d="M41 6H55L48 18Z"></path><path class="dev" d="M60 30L70 12H92"></path></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">旗（本番・作業台）</span><span class="gh">稼働クローン / 開発リポジトリ</span></div><div class="ds">本番がどこまで追いついているか、作業台にまだ送っていない変更があるかを示す。</div></div></div>
+  <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="rust" d="M8 24H88"></path></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">錆びた配線</span><span class="gh">放置ブランチ</span></div><div class="ds">長く手が付いていない分岐。合流するか、要らないか判断しよう。</div></div></div>
+  <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="w" d="M8 16H88M8 32H88"></path><path class="spark" d="M44 8L52 20L42 26L54 40"></path></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">ショート（火花）</span><span class="gh">コンフリクト</span></div><div class="ds">同じ場所を別々の分岐で直した状態。解消するまでスイッチは閉じられない。</div></div></div>
+</div>
+
+<section class="card" style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
+  <span class="nm">ブレーカーの一覧</span>
+  <table class="rules">
+    <thead><tr><th>段階</th><th>ルール</th><th>なぜ</th></tr></thead>
+    <tbody>
+    {% for r in rules %}
+      <tr><td style="white-space:nowrap;font-weight:700;color:{{ 'var(--red-d)' if r.level == 'trip' else 'var(--yellow-ink)' }}">{{ '落ちる（止める）' if r.level == 'trip' else '注意' }}</td><td>{{ r.rule }}</td><td class="ds">{{ r.why }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card" style="padding:16px 20px;display:flex;flex-direction:column;gap:6px">
+  <span class="nm">このアプリに無い操作と理由</span>
+  <span class="ds">強制上書き（force push）・履歴の書き換え … 他の記録を壊し、取り戻せなくなるため</span>
+  <span class="ds">幹線への直接はんだ付け … 検査ランプを通らずに本番へ届いてしまうため</span>
+  <span class="ds">作業台・本番フォルダへの書き込み … 本番の反映は自動デプロイの仕組みに任せ、アプリは読むだけにしているため</span>
+  <span class="ds">repo の削除・公開範囲や設定の変更 … 影響が大きく、GitHub の画面で慎重に行うべきため</span>
+</section>
+{% endblock %}

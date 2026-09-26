@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}配電盤 · repo-circuit{% endblock %}
+{% block content %}
+<div>
+  <h1>配電盤</h1>
+  <p class="lead">全ツールの配線を1行ずつ並べています。赤いランプや錆びた配線がある回路が上に来ます。行を押すと回路図が開きます。</p>
+</div>
+<div class="stats">
+  <div class="card stat"><span class="cap">要注意の回路</span><span class="num" style="color:var(--red-d)">{{ alerts }}</span></div>
+  <div class="card stat"><span class="cap">未接続の付箋（未着手）</span><span class="num">{{ unwired }}</span></div>
+  <div class="card stat"><span class="cap">閉じられるスイッチ（合流待ち）</span><span class="num" style="color:var(--green)">{{ ready }}</span></div>
+  <div class="card stat"><span class="cap">この7日でよく落ちたブレーカー</span>
+    {% if top_trip %}<span style="font-size:15px;font-weight:500">{{ top_trip[0] }} · {{ top_trip[1] }}回</span>{% else %}<span style="font-size:15px;font-weight:500">まだありません</span>{% endif %}
+  </div>
+</div>
+<div class="rows">
+{% for r in rows %}
+  <a class="card row" href="/repo/{{ r.name }}">
+    <span class="led {{ r.led }}" aria-hidden="true"></span>
+    <div class="who2">
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-weight:700;font-size:17px">{{ r.name }}</span>{% if r.alert %}<span class="badge">要注意</span>{% endif %}</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.5">{{ r.sentence }}</div>
+    </div>
+    <div class="mini" aria-hidden="true">
+      <div class="mbus"></div>
+      {% for b in r.viz %}<div class="mbr {{ b.kind }}" style="left:{{ 16 + loop.index0 * 30 }}px;width:{{ 220 - loop.index0 * 44 }}px"></div>{% endfor %}
+      <div class="mlamp"></div>
+    </div>
+    <div class="counts">
+      <div><span class="num">{{ r.issues }}</span><span class="cap">付箋</span></div>
+      <div><span class="num">{{ r.branches }}</span><span class="cap">分岐</span></div>
+      <div><span class="num">{{ r.prs }}</span><span class="cap">スイッチ</span></div>
+      <div><span class="num" style="font-size:15px;padding-top:4px">{{ r.deploy }}</span><span class="cap">本番</span></div>
+    </div>
+    <div class="nextact"><span class="cap">次にやると良いこと</span><span style="font-size:14px;font-weight:500">{{ r.next }}</span></div>
+  </a>
+{% else %}
+  <p class="lead">回路（repo）が見つかりません。GITHUB_TOKEN と GITHUB_OWNER を確認してください。</p>
+{% endfor %}
+</div>
+{% endblock %}

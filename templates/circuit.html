@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ view.name }} の回路図 · repo-circuit{% endblock %}
+{% block content %}
+<div class="cwrap">
+  <aside class="ctray">
+    <div class="kicker">部品トレイ · {{ view.name }} の付箋</div>
+    {% for c in chips %}
+    <button type="button" class="chipbtn {{ c.state }}" data-part="{{ c.part }}">
+      <span class="mono" style="font-size:12px;font-weight:600">#{{ c.number }} · {{ {'wired':'配線中','unwired':'未接続','done':'完了'}[c.state] }}</span>
+      <span style="font-size:14px;font-weight:500;line-height:1.45">{{ c.title }}</span>
+    </button>
+    {% else %}
+    <p class="cap">まだ付箋はありません。</p>
+    {% endfor %}
+    <a href="/tray?repo={{ view.name }}" style="font-size:13px;font-weight:500;padding:10px 0">付箋を貼る（起票）→</a>
+  </aside>
+
+  <section class="cmain">
+    <div class="chead">
+      <a href="/" style="font-size:13px">配電盤</a><span class="cap">›</span>
+      <select id="repo-switch" aria-label="回路を切り替える">
+        {% for n in names %}<option value="{{ n }}" {{ 'selected' if n == view.name }}>{{ n }}</option>{% endfor %}
+      </select>
+      {% if view.url %}<a href="{{ view.url }}" target="_blank" rel="noopener" style="font-size:13px">GitHub で見る ↗</a>{% endif %}
+      <div class="breaker" id="breaker">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 12V4H13V12Z M8 4V8" fill="none" stroke="currentColor" stroke-width="2"></path></svg>
+        <span>ブレーカー: <span id="breaker-text">正常</span></span>
+      </div>
+    </div>
+    <p class="card status">{{ status }}</p>
+    <div class="board" style="max-width:100%">
+      <div style="position:relative;width:{{ scene.width }}px;height:{{ scene.height }}px">
+      <svg width="{{ scene.width }}" height="{{ scene.height }}" viewBox="0 0 {{ scene.width }} {{ scene.height }}" role="img" aria-label="{{ view.name }} の配線図">
+        {% for p in scene.paths %}<path class="{{ p.cls }}" d="{{ p.d }}"></path>{% endfor %}
+        {% for f in scene.flows %}<path class="flow" id="{{ f.id }}" d="{{ f.d }}"></path>{% endfor %}
+        {% for sw in scene.switches %}
+          <circle class="contact" cx="{{ sw.px }}" cy="{{ sw.y }}" r="5"></circle>
+          <line class="blade" id="blade-{{ sw.n }}" x1="{{ sw.px }}" y1="{{ sw.y }}" x2="{{ sw.bx }}" y2="{{ sw.by }}" data-cx="{{ sw.cx }}" data-cy="{{ sw.y }}"></line>
+          <circle class="contact" cx="{{ sw.cx }}" cy="{{ sw.y }}" r="5"></circle>
+        {% endfor %}
+        {% for l in scene.leds %}<circle class="{{ l.cls }} halo" cx="{{ l.x }}" cy="{{ l.y }}" r="15"></circle><circle class="{{ l.cls }}" cx="{{ l.x }}" cy="{{ l.y }}" r="8"></circle>{% endfor %}
+        {% for c in scene.chips %}
+          <rect class="chipr" x="{{ c.x }}" y="{{ c.y }}" width="64" height="28" rx="3"></rect>
+          <path class="pin" d="M{{ c.x+10 }} {{ c.y-4 }}V{{ c.y }}M{{ c.x+24 }} {{ c.y-4 }}V{{ c.y }}M{{ c.x+38 }} {{ c.y-4 }}V{{ c.y }}M{{ c.x+52 }} {{ c.y-4 }}V{{ c.y }}M{{ c.x+10 }} {{ c.y+28 }}V{{ c.y+32 }}M{{ c.x+24 }} {{ c.y+28 }}V{{ c.y+32 }}M{{ c.x+38 }} {{ c.y+28 }}V{{ c.y+32 }}M{{ c.x+52 }} {{ c.y+28 }}V{{ c.y+32 }}"></path>
+          <text class="chiptxt" x="{{ c.x+32 }}" y="{{ c.y+19 }}">#{{ c.n }}</text>
+        {% endfor %}
+        {% for d in scene.dots %}<circle class="{{ d.cls }}" cx="{{ d.x }}" cy="{{ d.y }}" r="{{ d.r }}"></circle>{% endfor %}
+        {% for t in scene.texts %}<text class="{{ t.cls }}" x="{{ t.x }}" y="{{ t.y }}">{{ t.t }}</text>{% endfor %}
+        <circle id="lamp" class="lamp" cx="{{ scene.lamp.x }}" cy="{{ scene.lamp.y }}" r="20"></circle>
+        <path class="fil" d="M{{ scene.lamp.x-10 }} {{ scene.lamp.y-10 }}L{{ scene.lamp.x+10 }} {{ scene.lamp.y+10 }}M{{ scene.lamp.x+10 }} {{ scene.lamp.y-10 }}L{{ scene.lamp.x-10 }} {{ scene.lamp.y+10 }}"></path>
+      </svg>
+      {% for h in scene.hits %}<button type="button" class="hit" data-part="{{ h.part }}" aria-label="{{ h.label }}" title="{{ h.label }}" style="left:{{ h.x|round|int }}px;top:{{ h.y|round|int }}px;width:{{ h.w|round|int }}px;height:{{ h.h|round|int }}px"></button>{% endfor %}
+      </div>
+    </div>
+    {% if scene.hidden_branches %}<p class="cap">ほかに分岐が {{ scene.hidden_branches }} 本あります（表示は6本まで）。</p>{% endif %}
+    <p class="cap">部品を押すと右に説明と、その部品でできる操作が出ます。</p>
+  </section>
+
+  <aside class="card cpanel" id="panel" aria-live="polite">
+    <div class="kicker">回路図の見方</div>
+    <h2>電気が流れる＝変更が本番に届く</h2>
+    <p>太い銅色の線が<b>幹線</b>（main）。右端の<b>本番ランプ</b>につながっています。下に垂れた配線が<b>分岐</b>（ブランチ）で、戻り口の<b>スイッチ</b>（プルリクエスト）を閉じると幹線に合流し、電気が本番まで届きます。</p>
+    <p>スイッチ横の<b>検査ランプ</b>が緑なら閉じてOK。危ない操作をしようとすると<b>ブレーカー</b>が落ちて止め、理由を教えます。</p>
+    <p>幹線の上の旗は、<b>本番はここまで</b>（稼働クローンの位置）と<b>作業台</b>（あなたの PC の開発フォルダ）です。</p>
+  </aside>
+</div>
+<script type="application/json" id="parts-data">{{ parts|tojson }}</script>
+{% endblock %}
+{% block scripts %}<script src="/static/circuit.js"></script>{% endblock %}
