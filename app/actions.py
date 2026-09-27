@@ -130,10 +130,12 @@ class Actions:
         src = self.service.source
         repo = p["repo"]
         url = ""
+        number = None
         if action == "create_issue":
             body = build_body(p.get("situation", ""), p.get("want", ""), p.get("note", ""), p.get("source", "web"))
             res = await src.create_issue(repo, p["title"], body, labels_for(p.get("kind", ""), p.get("priority", "")))
-            url, message = res.get("html_url", ""), f"付箋 #{res.get('number')} を貼りました"
+            url, number = res.get("html_url", ""), res.get("number")
+            message = f"付箋 #{number} を貼りました"
         elif action == "comment_issue":
             await src.comment(repo, p["number"], p["body"])
             message = f"付箋 #{p['number']} にメモを足しました"
@@ -151,7 +153,8 @@ class Actions:
             message = f"分岐 {p['name']} を撤去しました"
         elif action == "create_pr":
             res = await src.create_pr(repo, p["head"], view.default_branch, p["title"], p.get("body", ""))
-            url, message = res.get("html_url", ""), f"スイッチ #{res.get('number')} を付けました"
+            url, number = res.get("html_url", ""), res.get("number")
+            message = f"スイッチ #{number} を付けました"
         elif action == "merge_pr":
             await src.merge_pr(repo, p["number"])
             message = f"スイッチ #{p['number']} を閉じました。通電しました"
@@ -167,7 +170,7 @@ class Actions:
         else:  # normalize() で弾いているので到達しない
             raise ActionError(action)
         src.invalidate(repo)
-        return {**result, "ok": True, "message": message, "url": url}
+        return {**result, "ok": True, "message": message, "url": url, "number": number}
 
     def _log(self, action: str, p: dict, verdicts) -> None:
         if not self.log_path or not verdicts:

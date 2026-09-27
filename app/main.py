@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import hmac
 import secrets
-from collections import Counter
+from collections import Counter, OrderedDict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -21,7 +23,8 @@ from .config import Settings, load_settings
 from .explain import parts, status_text, summary
 from .github import GitHubError, GitHubSource
 from .guards import ACTIONS, RULES
-from .issues import KINDS, PRIORITIES, board_state, wire_for
+from .issues import KINDS, PRIORITIES, board_state, labels_for, wire_for
+from .model import Issue, now
 from .service import Service
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -104,7 +107,24 @@ def create_app(settings: Settings | None = None, source=None) -> FastAPI:
         names = await source.repo_names()
         return RedirectResponse(f"/repo/{names[0]}" if names else "/", status_code=303)
 
-    async def tray_context(repo_filter: str = "") -> dict:
+    # 起票フォームの使い捨て送信トークン。フォームを描くたびに発行し、1回使ったら消す。
+    # 再読み込みによるフォーム再送信や二重クリックで、同じ Issue が2件できるのを防ぐ。
+    submit_ids: OrderedDict[str, None] = OrderedDict()
+
+    def new_submit_id() -> str:
+        sid = secrets.token_urlsafe(16)
+        submit_ids[sid] = None
+        while len(submit_ids) > 500:
+            submit_ids.popitem(last=False)
+        return sid
+
+    def use_submit_id(sid: str) -> bool:
+        if sid in submit_ids:
+            del submit_ids[sid]
+            return True
+        return False
+
+    async def tray_context(repo_filter: str = "", created: Issue | None = None) -> dict:
         views = await service.views()
         cols = {"unwired": [], "wired": [], "done": []}
         for v in views:
@@ -120,11 +140,35 @@ def create_app(settings: Settings | None = None, source=None) -> FastAPI:
         for c in cols.values():
             c.sort(key=lambda x: (x["issue"].priority, -x["issue"].created_at.timestamp()))
         cols["done"] = cols["done"][:20]
-        return {"cols": cols, "names": [v.name for v in views], "repo_filter": repo_filter}
+        # 起票直後は GitHub の一覧にまだ出ないことがあるので、作った付箋を先頭に足して見せる
+        if created and not any(
+            c["issue"].repo == created.repo and c["issue"].number == created.number for col in cols.values() for c in col
+        ):
+            cols["unwired"].insert(0, {"issue": created, "note": "たった今"})
+        return {"cols": cols, "names": [v.name for v in views], "repo_filter": repo_filter, "submit_id": new_submit_id()}
 
     @app.get("/tray", response_class=HTMLResponse)
-    async def tray(request: Request, repo: str = ""):
-        return render(request, "tray.html", **await tray_context(repo), result=None, form={}, active="tray")
+    async def tray(
+        request: Request,
+        repo: str = "",
+        created_repo: str = "",
+        created_no: int = 0,
+        created_title: str = "",
+        created_kind: str = "",
+        created_priority: str = "",
+        created_url: str = "",
+    ):
+        created, result = None, None
+        if created_repo and created_no:
+            created = Issue(repo=created_repo, number=created_no, title=created_title, body="", state="open",
+                            labels=labels_for(created_kind, created_priority), created_at=now(), url=created_url)
+            result = {
+                "ok": True,
+                "message": f"付箋 #{created_no} を貼りました",
+                "url": created_url if created_url.startswith("https://github.com/") else "",
+                "cmd": f'gh issue create -R {settings.owner}/{created_repo} -t "{created_title}" -l {",".join(created.labels)}',
+            }
+        return render(request, "tray.html", **await tray_context(repo, created), result=result, form={}, active="tray")
 
     @app.post("/tray", response_class=HTMLResponse)
     async def tray_post(
@@ -136,15 +180,23 @@ def create_app(settings: Settings | None = None, source=None) -> FastAPI:
         want: str = Form(""),
         kind: str = Form("improvement"),
         priority: str = Form("p2"),
+        submit_id: str = Form(""),
     ):
         check_csrf(csrf_token)
         form = {"repo": repo, "title": title, "situation": situation, "want": want, "kind": kind, "priority": priority}
+        if not use_submit_id(submit_id):
+            result = {"ok": False, "message": "このフォームは送信済みか、期限切れです（アプリの再起動など）。同じ付箋が2枚できないよう、今回は貼りませんでした。部品トレイで貼られているか確認し、無ければもう一度入力してください。", "verdicts": []}
+            return render(request, "tray.html", **await tray_context(), result=result, form={}, active="tray")
         try:
             result = await actions.run("create_issue", {**form, "source": "web"}, ack=True)
         except ActionError as e:
             result = {"ok": False, "message": str(e), "verdicts": []}
-        keep = {} if result.get("ok") else form
-        return render(request, "tray.html", **await tray_context(), result=result, form=keep, active="tray")
+        if result.get("ok"):
+            # Post/Redirect/Get: 結果ページを再読み込みしてもフォームが再送信されないよう、GET に移す
+            q = urlencode({"created_repo": repo, "created_no": result.get("number") or 0, "created_title": title, "created_kind": kind,
+                           "created_priority": priority, "created_url": result.get("url", "")})
+            return RedirectResponse(f"/tray?{q}", status_code=303)
+        return render(request, "tray.html", **await tray_context(), result=result, form=form, active="tray")
 
     @app.get("/guide", response_class=HTMLResponse)
     async def guide(request: Request):
