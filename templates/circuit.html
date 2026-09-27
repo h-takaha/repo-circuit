@@ -66,4 +66,4 @@
 </div>
 <script type="application/json" id="parts-data">{{ parts|tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="/static/circuit.js"></script>{% endblock %}
+{% block scripts %}<script src="{{ asset('circuit.js') }}"></script>{% endblock %}

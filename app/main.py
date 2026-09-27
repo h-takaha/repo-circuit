@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import secrets
 from collections import Counter, OrderedDict
@@ -49,7 +50,15 @@ def create_app(settings: Settings | None = None, source=None) -> FastAPI:
     app.middleware("http")(create_basic_auth_middleware("repo-circuit"))
     app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
     templates = Jinja2Templates(directory=ROOT / "templates")
-    templates.env.globals.update(csrf=csrf, demo=settings.demo, owner=settings.owner, kinds=KINDS, priorities=PRIORITIES)
+    # static の URL に内容ハッシュを付ける。更新後もブラウザが古い JS/CSS をキャッシュから使い続けないようにする。
+    asset_versions = {
+        f.name: hashlib.sha256(f.read_bytes()).hexdigest()[:10] for f in (ROOT / "static").iterdir() if f.is_file()
+    }
+
+    def asset(name: str) -> str:
+        return f"/static/{name}?v={asset_versions.get(name, '0')}"
+
+    templates.env.globals.update(csrf=csrf, demo=settings.demo, owner=settings.owner, kinds=KINDS, priorities=PRIORITIES, asset=asset)
 
     def render(request: Request, name: str, **ctx) -> HTMLResponse:
         return templates.TemplateResponse(request, name, ctx)

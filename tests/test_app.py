@@ -83,3 +83,10 @@ def test_tray_post_redirects_and_resubmit_does_not_duplicate(client, csrf, sourc
 def test_created_issue_is_shown_even_if_github_list_lags(client):
     page = client.get("/tray?created_repo=job-watcher&created_no=9&created_title=まだ一覧に無い&created_kind=idea&created_priority=p3")
     assert "まだ一覧に無い" in page.text and "たった今" in page.text
+
+
+def test_static_urls_carry_content_version(client):
+    html = client.get("/repo/event-calendar").text
+    assert re.search(r'/static/style\.css\?v=[0-9a-f]{10}', html)
+    assert re.search(r'/static/circuit\.js\?v=[0-9a-f]{10}', html)
+    assert client.get(re.search(r'(/static/circuit\.js\?v=[0-9a-f]+)', html).group(1)).status_code == 200
