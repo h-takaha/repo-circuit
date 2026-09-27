@@ -2,6 +2,8 @@ import re
 
 from fastapi.testclient import TestClient
 
+from conftest import AUTH
+
 from app.main import create_app
 
 
@@ -90,3 +92,19 @@ def test_static_urls_carry_content_version(client):
     assert re.search(r'/static/style\.css\?v=[0-9a-f]{10}', html)
     assert re.search(r'/static/circuit\.js\?v=[0-9a-f]{10}', html)
     assert client.get(re.search(r'(/static/circuit\.js\?v=[0-9a-f]+)', html).group(1)).status_code == 200
+
+
+def test_csrf_and_submit_tokens_survive_restart_and_other_workers(settings, source, csrf):
+    # 別プロセス（再起動後・別ワーカー）相当の app でも、同じページのトークンが通る
+    other = TestClient(create_app(settings, source), headers=AUTH)
+    body = {"action": "merge_pr", "params": {"repo": "event-calendar", "number": 6}}
+    assert other.post("/actions/check", json=body, headers={"X-CSRF-Token": csrf}).status_code == 200
+
+    first = TestClient(create_app(settings, source), headers=AUTH)
+    sid = _submit_id(first)
+    data = {"csrf_token": csrf, "submit_id": sid, "repo": "job-watcher", "title": "別ワーカー"}
+    assert other.post("/tray", data=data, follow_redirects=False).status_code == 303
+    again = first.post("/tray", data=data, follow_redirects=False)  # 使用済みはどのワーカーでも拒否
+    assert again.status_code == 200 and "送信済み" in again.text
+    forged = {**data, "submit_id": "abc.0000"}
+    assert "送信済み" in other.post("/tray", data=forged, follow_redirects=False).text

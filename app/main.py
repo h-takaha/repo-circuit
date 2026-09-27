@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import os
 import secrets
-from collections import Counter, OrderedDict
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -44,7 +45,13 @@ def create_app(settings: Settings | None = None, source=None) -> FastAPI:
     service = Service(settings, source)
     log_path = settings.data_dir / "guard-log.jsonl"
     actions = Actions(service, log_path)
-    csrf = secrets.token_urlsafe(32)
+    # CSRF トークンは秘密値から導出する。起動ごとのランダムだと、再起動前に開いたページや
+    # 別ワーカーが描いたページからの操作が「一致しません」になるため。
+    secret = (os.getenv("CSRF_SECRET") or os.getenv("BASIC_AUTH_PASSWORD") or "").encode("utf-8")
+    if not secret:
+        secret = secrets.token_bytes(32)
+    csrf = hmac.new(secret, b"repo-circuit-csrf", hashlib.sha256).hexdigest()
+    used_ids_path = settings.data_dir / "used-submit-ids.txt"
 
     app = FastAPI(title="repo-circuit", docs_url=None, redoc_url=None, openapi_url=None)
     app.middleware("http")(create_basic_auth_middleware("repo-circuit"))
@@ -65,7 +72,7 @@ def create_app(settings: Settings | None = None, source=None) -> FastAPI:
 
     def check_csrf(token: str | None) -> None:
         if not token or not hmac.compare_digest(token, csrf):
-            raise HTTPException(403, "CSRF トークンが一致しません。ページを再読み込みしてください。")
+            raise HTTPException(403, "操作の確認用トークンが一致しません。アプリが再起動した可能性があります。ページを再読み込みしてから、もう一度操作してください。")
 
     @app.exception_handler(GitHubError)
     async def github_error(request: Request, exc: GitHubError):
@@ -116,22 +123,31 @@ def create_app(settings: Settings | None = None, source=None) -> FastAPI:
         names = await source.repo_names()
         return RedirectResponse(f"/repo/{names[0]}" if names else "/", status_code=303)
 
-    # 起票フォームの使い捨て送信トークン。フォームを描くたびに発行し、1回使ったら消す。
-    # 再読み込みによるフォーム再送信や二重クリックで、同じ Issue が2件できるのを防ぐ。
-    submit_ids: OrderedDict[str, None] = OrderedDict()
+    # 起票フォームの使い捨て送信トークン（「ランダムID.署名」）。署名はどのワーカーでも検証でき、
+    # 使用済み ID はファイルで共有する。再読み込みによる再送信や二重クリックで Issue が2件できるのを防ぐ。
+    def _sign(sid: str) -> str:
+        return hmac.new(secret, f"submit:{sid}".encode(), hashlib.sha256).hexdigest()[:24]
 
     def new_submit_id() -> str:
-        sid = secrets.token_urlsafe(16)
-        submit_ids[sid] = None
-        while len(submit_ids) > 500:
-            submit_ids.popitem(last=False)
-        return sid
+        sid = secrets.token_urlsafe(12)
+        return f"{sid}.{_sign(sid)}"
 
-    def use_submit_id(sid: str) -> bool:
-        if sid in submit_ids:
-            del submit_ids[sid]
-            return True
-        return False
+    def use_submit_id(token: str) -> bool:
+        sid, _, sig = token.partition(".")
+        if not sid or not hmac.compare_digest(sig, _sign(sid)):
+            return False
+        try:
+            used = used_ids_path.read_text(encoding="utf-8").split() if used_ids_path.exists() else []
+        except OSError:
+            used = []
+        if sid in used:
+            return False
+        try:
+            used_ids_path.parent.mkdir(parents=True, exist_ok=True)
+            used_ids_path.write_text("\n".join((used + [sid])[-1000:]) + "\n", encoding="utf-8")
+        except OSError:
+            pass
+        return True
 
     async def tray_context(repo_filter: str = "", created: Issue | None = None) -> dict:
         views = await service.views()
@@ -194,7 +210,7 @@ def create_app(settings: Settings | None = None, source=None) -> FastAPI:
         check_csrf(csrf_token)
         form = {"repo": repo, "title": title, "situation": situation, "want": want, "kind": kind, "priority": priority}
         if not use_submit_id(submit_id):
-            result = {"ok": False, "message": "このフォームは送信済みか、期限切れです（アプリの再起動など）。同じ付箋が2枚できないよう、今回は貼りませんでした。部品トレイで貼られているか確認し、無ければもう一度入力してください。", "verdicts": []}
+            result = {"ok": False, "message": "このフォームは送信済みです。同じ付箋が2枚できないよう、今回は貼りませんでした。部品トレイで貼られているか確認し、無ければもう一度入力してください。", "verdicts": []}
             return render(request, "tray.html", **await tray_context(), result=result, form={}, active="tray")
         try:
             result = await actions.run("create_issue", {**form, "source": "web"}, ack=True)
