@@ -33,9 +33,11 @@
     return el('details', {}, el('summary', {}, 'コマンドで言うと'), el('code', { class: 'cmd' }, cmd));
   }
 
-  function setBreaker(tripped) {
-    breaker.classList.toggle('trip', tripped);
-    breakerText.textContent = tripped ? 'トリップ' : '正常';
+  // 'ok'（正常）/ 'warn'（注意: 確認すれば進める）/ 'trip'（トリップ: 止める）
+  function setBreaker(state) {
+    breaker.classList.toggle('trip', state === 'trip');
+    breaker.classList.toggle('warn', state === 'warn');
+    breakerText.textContent = { trip: 'トリップ', warn: '注意' }[state] || '正常';
   }
 
   function highlight(partId) {
@@ -47,7 +49,7 @@
     if (!p) return;
     current = partId;
     highlight(partId);
-    setBreaker(false);
+    setBreaker('ok');
     document.querySelectorAll('.tripping').forEach((n) => n.classList.remove('tripping'));
     const acts = el('div', { class: 'acts' }, (p.actions || []).map((a) =>
       el('button', { type: 'button', class: 'btn' + (a.danger ? ' danger' : ''), onclick: () => prepare(a) }, a.label)));
@@ -114,7 +116,7 @@
   }
 
   function showTrip(res) {
-    setBreaker(true);
+    setBreaker('trip');
     const hit = document.querySelector('.hit.sel');
     if (res.action === 'merge_pr' && res.cmd) {
       const n = (res.cmd.match(/merge (\d+)/) || [])[1];
@@ -140,6 +142,7 @@
 
   function showConfirm(a, params, res) {
     const warns = res.verdicts.filter((v) => v.level === 'warn');
+    setBreaker(warns.length ? 'warn' : 'ok');
     const go = el('button', { type: 'button', class: 'btn', disabled: warns.length > 0 }, '実行する');
     const ack = warns.length ? el('input', { type: 'checkbox', id: 'ack', onchange: (e) => { go.disabled = !e.target.checked; } }) : null;
     go.addEventListener('click', () => run(a, params, !!(ack && ack.checked), go));
