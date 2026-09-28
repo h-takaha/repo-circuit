@@ -116,7 +116,7 @@ RULES: list[Rule] = [
         "merge_ci_unavailable", TRIP, ("merge_pr",), lambda p, v: bool(_pr(p, v)) and _pr(p, v).ci == "unavailable",
         "検査ランプが取得不可のスイッチは閉じられません",
         "GitHub の検査結果を取得できないため、安全に合流できるか確認できません。検査なしとは異なり、確認してもこのアプリからはマージできません。",
-        ("GitHub で検査結果とトークンの Checks 読み取り権限を確認する", "検査結果を取得できるようになったら、画面を再読み込みする"),
+        ("GitHub で検査結果を確認し、Checks API に対応した認証方式を検討する", "検査結果を取得できるようになったら、画面を再読み込みする"),
     ),
     Rule(
         "merge_ci_failure", TRIP, ("merge_pr",), lambda p, v: bool(_pr(p, v)) and _pr(p, v).ci == "failure",
