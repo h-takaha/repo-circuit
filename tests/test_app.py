@@ -2,6 +2,8 @@ import re
 
 from fastapi.testclient import TestClient
 
+from conftest import AUTH
+
 from app.main import create_app
 
 
@@ -43,9 +45,9 @@ def test_merge_flow_via_http(client, csrf):
 
 
 def test_tray_form_creates_issue_and_trips_on_secret(client, csrf):
-    ok = client.post("/tray", data={"csrf_token": csrf, "repo": "job-watcher", "title": "通知が遅い", "situation": "朝", "kind": "bug", "priority": "p1"})
+    ok = client.post("/tray", data={"csrf_token": csrf, "submit_id": _submit_id(client), "repo": "job-watcher", "title": "通知が遅い", "situation": "朝", "kind": "bug", "priority": "p1"})
     assert "付箋 #1 を貼りました" in ok.text
-    ng = client.post("/tray", data={"csrf_token": csrf, "repo": "job-watcher", "title": "x", "situation": "password=hunter22"})
+    ng = client.post("/tray", data={"csrf_token": csrf, "submit_id": _submit_id(client), "repo": "job-watcher", "title": "x", "situation": "password=hunter22"})
     assert "ブレーカーが落ちました" in ng.text
     assert client.post("/tray", data={"repo": "job-watcher", "title": "x"}).status_code == 403
 
@@ -62,3 +64,47 @@ def test_circuit_escapes_github_text(client, source):
     source.views["event-calendar"].issues[0].title = "<script>alert(1)</script>"
     html = client.get("/repo/event-calendar").text
     assert "<script>alert(1)</script>" not in html
+
+
+def _submit_id(client):
+    return re.search(r'name="submit_id" value="([^"]+)"', client.get("/tray").text).group(1)
+
+
+def test_tray_post_redirects_and_resubmit_does_not_duplicate(client, csrf, source):
+    sid = _submit_id(client)
+    data = {"csrf_token": csrf, "submit_id": sid, "repo": "job-watcher", "title": "二重起票テスト", "situation": "x"}
+    first = client.post("/tray", data=data, follow_redirects=False)
+    assert first.status_code == 303 and "created_no=1" in first.headers["location"]
+    page = client.get(first.headers["location"])
+    assert "付箋 #1 を貼りました" in page.text and "二重起票テスト" in page.text
+    again = client.post("/tray", data=data, follow_redirects=False)  # 再読み込み・二重クリック
+    assert again.status_code == 200 and "送信済み" in again.text
+    assert [i.title for i in source.views["job-watcher"].issues] == ["二重起票テスト"]
+
+
+def test_created_issue_is_shown_even_if_github_list_lags(client):
+    page = client.get("/tray?created_repo=job-watcher&created_no=9&created_title=まだ一覧に無い&created_kind=idea&created_priority=p3")
+    assert "まだ一覧に無い" in page.text and "たった今" in page.text
+
+
+def test_static_urls_carry_content_version(client):
+    html = client.get("/repo/event-calendar").text
+    assert re.search(r'/static/style\.css\?v=[0-9a-f]{10}', html)
+    assert re.search(r'/static/circuit\.js\?v=[0-9a-f]{10}', html)
+    assert client.get(re.search(r'(/static/circuit\.js\?v=[0-9a-f]+)', html).group(1)).status_code == 200
+
+
+def test_csrf_and_submit_tokens_survive_restart_and_other_workers(settings, source, csrf):
+    # 別プロセス（再起動後・別ワーカー）相当の app でも、同じページのトークンが通る
+    other = TestClient(create_app(settings, source), headers=AUTH)
+    body = {"action": "merge_pr", "params": {"repo": "event-calendar", "number": 6}}
+    assert other.post("/actions/check", json=body, headers={"X-CSRF-Token": csrf}).status_code == 200
+
+    first = TestClient(create_app(settings, source), headers=AUTH)
+    sid = _submit_id(first)
+    data = {"csrf_token": csrf, "submit_id": sid, "repo": "job-watcher", "title": "別ワーカー"}
+    assert other.post("/tray", data=data, follow_redirects=False).status_code == 303
+    again = first.post("/tray", data=data, follow_redirects=False)  # 使用済みはどのワーカーでも拒否
+    assert again.status_code == 200 and "送信済み" in again.text
+    forged = {**data, "submit_id": "abc.0000"}
+    assert "送信済み" in other.post("/tray", data=forged, follow_redirects=False).text

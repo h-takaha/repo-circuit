@@ -36,10 +36,11 @@
     </div>
   </section>
 
-  <form class="card tform" method="post" action="/tray">
+  <form class="card tform" method="post" action="/tray" onsubmit="var b=this.querySelector('button[type=submit]');b.disabled=true;b.textContent='貼っています…'">
     <h2>付箋を貼る</h2>
     <p class="cap" style="margin:-4px 0 0;line-height:1.6">GitHub では、選んだツールの repo に Issue が作られます（ラベル feedback）。Claude / Codex に「○○の△△を直したい」と話しかけても、同じ場所に貼られます。</p>
     <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <input type="hidden" name="submit_id" value="{{ submit_id }}">
     <div class="field"><label for="repo">どのツール？</label>
       <select id="repo" name="repo" class="inp" required>
         {% for n in names %}<option value="{{ n }}" {{ 'selected' if n == (form.repo or repo_filter) }}>{{ n }}</option>{% endfor %}

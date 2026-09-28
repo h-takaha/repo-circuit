@@ -92,6 +92,7 @@ code.cmd{font-family:'IBM Plex Mono',monospace;font-size:12.5px;background:var(-
 .chead select{font:inherit;font-size:14px;min-height:40px;border-radius:8px;border:2px solid var(--line);background:var(--card);color:var(--ink);padding:0 10px}
 .breaker{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;padding:6px 10px;border-radius:6px;background:var(--green-bg);color:var(--green-ink)}
 .breaker.trip{background:var(--red-d);color:#FFFDF8}
+.breaker.warn{background:var(--yellow-bg);color:var(--yellow-ink);outline:2px solid var(--yellow)}
 .status{margin:0;font-size:15px;line-height:1.6;padding:10px 14px}
 .board{position:relative;background:var(--card);border:2px solid var(--ink);border-radius:12px;overflow:auto}
 .board svg{display:block}
