@@ -62,7 +62,7 @@ class PullRequest:
     merged: bool
     draft: bool
     head_sha: str
-    ci: str  # success / failure / pending / none
+    ci: str  # success / failure / pending / none / unavailable
     mergeable_state: str  # clean / dirty / blocked / unknown ...
     url: str = ""
 

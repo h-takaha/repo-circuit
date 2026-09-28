@@ -160,7 +160,7 @@ def create_app(settings: Settings | None = None, source=None) -> FastAPI:
                 wire, pr = wire_for(v, i)
                 note = ""
                 if state == "wired":
-                    note = f"分岐 {wire}" + (f" · スイッチ #{pr.number} " + {"success": "緑", "failure": "赤", "pending": "検査中"}.get(pr.ci, "") if pr else "")
+                    note = f"分岐 {wire}" + (f" · スイッチ #{pr.number} " + {"success": "緑", "failure": "赤", "pending": "検査中", "unavailable": "取得不可"}.get(pr.ci, "") if pr else "")
                 cols[state].append({"issue": i, "note": note})
         for c in cols.values():
             c.sort(key=lambda x: (x["issue"].priority, -x["issue"].created_at.timestamp()))

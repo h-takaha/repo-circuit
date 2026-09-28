@@ -158,11 +158,16 @@ class GitHubSource:
         )
 
     async def _pull(self, r: str, p: dict) -> PullRequest:
-        detail, checks = await asyncio.gather(
-            self._get(f"{r}/pulls/{p['number']}"),
-            self._get(f"{r}/commits/{p['head']['sha']}/check-runs", per_page=100),
-        )
-        return self._pull_basic(detail, _ci_state(checks.get("check_runs", [])), detail.get("mergeable_state") or "unknown")
+        detail = await self._get(f"{r}/pulls/{p['number']}")
+        try:
+            checks = await self._get(f"{r}/commits/{detail['head']['sha']}/check-runs", per_page=100)
+        except GitHubError as e:
+            if e.status != 403:
+                raise
+            ci = "unavailable"
+        else:
+            ci = _ci_state(checks.get("check_runs", []))
+        return self._pull_basic(detail, ci, detail.get("mergeable_state") or "unknown")
 
     @staticmethod
     def _pull_basic(p: dict, ci: str, mergeable_state: str) -> PullRequest:

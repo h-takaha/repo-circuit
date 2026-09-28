@@ -42,6 +42,20 @@ Authorization: Basic ...
 
 ## テスト
 
+### 検査ランプが「取得不可」の場合
+
+Checks API が 403 を返しても、配電盤と回路図は表示します。該当スイッチの検査状態は
+**取得不可**となり、「検査なし」や「合格」とは扱いません。取得不可の間は、ブレーカーが
+アプリからの合流（マージ）を止めます。確認を押しても解除できません。
+
+Fine-grained PAT は現在 Checks API に対応しておらず、設定画面で Checks 権限を追加することもできません
+（[GitHub の Fine-grained PAT の制約](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#fine-grained-personal-access-tokens-limitations)）。
+検査結果を取得するには、GitHub App など Checks API に対応した認証方式と、必要な読み取り権限を検討してください。
+認証方式の変更には別途設定が必要です。取得できるようになったら、画面を再読み込みしてください。
+403 以外の Checks API エラーや、PR 詳細など他の API の 403 は通常の取得エラーとして扱います。
+
+### 実行
+
 ```powershell
 .venv\Scripts\pip install -r requirements-dev.txt
 .venv\Scripts\python -m pytest
