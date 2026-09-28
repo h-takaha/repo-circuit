@@ -42,6 +42,19 @@ Authorization: Basic ...
 
 ## テスト
 
+### 検査ランプが「取得不可」の場合
+
+Checks API が 403 を返しても、配電盤と回路図は表示します。該当スイッチの検査状態は
+**取得不可**となり、「検査なし」や「合格」とは扱いません。取得不可の間は、ブレーカーが
+アプリからの合流（マージ）を止めます。確認を押しても解除できません。
+
+Fine-grained PAT で検査結果を読むには、Actions 権限とは別に **Checks: Read** が必要です
+（[GitHub の Checks API ドキュメント](https://docs.github.com/en/rest/checks/runs#list-check-runs-for-a-git-reference)）。
+権限などを確認して取得できるようになったら、画面を再読み込みしてください。
+403 以外の Checks API エラーや、PR 詳細など他の API の 403 は通常の取得エラーとして扱います。
+
+### 実行
+
 ```powershell
 .venv\Scripts\pip install -r requirements-dev.txt
 .venv\Scripts\python -m pytest
@@ -50,7 +63,7 @@ Authorization: Basic ...
 ## 実機への導入チェックリスト（Hiroy）
 
 1. **PAT を発行**: GitHub → Settings → Developer settings → Fine-grained tokens。対象 = h-takaha の全 repo、
-   権限 = Issues RW / Pull requests RW / Contents RW / Actions RW / Metadata R（`.env.example` と同じ）
+   権限 = Issues RW / Pull requests RW / Contents RW / Actions RW / Checks R / Metadata R（`.env.example` と同じ）
 2. **稼働クローン**: `git clone https://github.com/h-takaha/repo-circuit C:\lab\run\repo-circuit`
 3. **venv**: `C:\lab\git\agent-ops\setup\phase3\setup-tool-venv.ps1` で `C:\lab\run\repo-circuit\.venv` を作る
 4. **.env**: `C:\lab\run\repo-circuit\.env` に PAT と Basic 認証値（画面・ログ・コミットに出さない）

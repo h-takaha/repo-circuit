@@ -1,9 +1,15 @@
 import asyncio
+import re
 
 import httpx
 import respx
+import pytest
 
-from app.github import GitHubSource
+from fastapi.testclient import TestClient
+
+from app.main import create_app
+
+from app.github import GitHubError, GitHubSource
 
 API = "https://api.github.com/repos/h-takaha/tool"
 
@@ -11,6 +17,94 @@ API = "https://api.github.com/repos/h-takaha/tool"
 def _pr(n, head, sha, body=""):
     return {"number": n, "title": "t", "body": body, "head": {"ref": head, "sha": sha}, "base": {"ref": "main"},
             "state": "open", "merged_at": None, "draft": False, "mergeable_state": "clean", "html_url": ""}
+
+
+def _mock_agent_ops(check_status=403, detail_status=200, router=respx):
+    api = "https://api.github.com/repos/h-takaha/agent-ops"
+    c = {"sha": "m1", "commit": {"message": "main", "committer": {"date": "2026-09-01T00:00:00Z"}}}
+    pr = _pr(2, "fix/1-x", "b1", "Fixes #1")
+    router.get("https://api.github.com/user/repos").respond(200, json=[
+        {"name": "agent-ops", "owner": {"login": "h-takaha"}}])
+    router.get(api).respond(200, json={"default_branch": "main"})
+    router.get(f"{api}/commits").respond(200, json=[c])
+    router.get(f"{api}/branches").respond(200, json=[{"name": "main"}, {"name": "fix/1-x"}])
+    router.get(f"{api}/compare/main...fix/1-x").respond(200, json={
+        "ahead_by": 1, "behind_by": 0, "merge_base_commit": c,
+        "commits": [{**c, "sha": "b1"}]})
+    router.get(f"{api}/pulls", params={"state": "open"}).respond(200, json=[pr])
+    router.get(f"{api}/pulls", params={"state": "closed"}).respond(200, json=[])
+    router.get(f"{api}/issues").respond(200, json=[
+        {"number": 1, "title": "skill 配置", "state": "open", "labels": [{"name": "feedback"}],
+         "created_at": "2026-09-01T00:00:00Z"}])
+    router.get(f"{api}/pulls/2").respond(detail_status, json=pr if detail_status == 200 else {"message": "Forbidden"})
+    checks = router.get(f"{api}/commits/b1/check-runs").respond(
+        check_status, json={"check_runs": []} if check_status == 200 else {"message": "Forbidden"})
+    return api, checks
+
+
+@respx.mock
+def test_checks_403_preserves_repo_view():
+    _mock_agent_ops()
+    src = GitHubSource("t", "h-takaha")
+    v = asyncio.run(src.repo_view("agent-ops"))
+    assert v.head_sha == "m1"
+    assert v.branches[0].name == "fix/1-x"
+    assert v.issues[0].title == "skill 配置"
+    assert v.pulls[0].ci == "unavailable"
+    assert v.pulls[0].mergeable_state == "clean"
+
+
+def test_checks_403_pages_render_and_merge_never_writes(settings):
+    with respx.mock(assert_all_called=False) as router:
+        _check_pages_and_merge(settings, router)
+
+
+def _check_pages_and_merge(settings, router):
+    api, checks = _mock_agent_ops(router=router)
+    merge = router.put(f"{api}/pulls/2/merge").respond(200, json={"merged": True})
+    src = GitHubSource("t", "h-takaha")
+    auth = {"Authorization": "Basic YWRtaW46cHc="}
+    with TestClient(create_app(settings, src), headers=auth) as client:
+        panel = client.get("/")
+        assert panel.status_code == 200
+        assert 'href="/repo/agent-ops"' in panel.text and "取得不可" in panel.text
+        circuit = client.get("/repo/agent-ops")
+        assert circuit.status_code == 200
+        assert 'aria-label="agent-ops の配線図"' in circuit.text
+        assert ">取得不可</text>" in circuit.text
+        assert "skill 配置" in circuit.text
+        tray = client.get("/tray?repo=agent-ops")
+        assert tray.status_code == 200 and "取得不可" in tray.text
+        guide = client.get("/guide").text
+        assert "検査ランプが取得不可のスイッチは閉じられません" in guide
+        csrf = re.search(r'name="csrf-token" content="([^"]+)"', guide).group(1)
+        body = {"action": "merge_pr", "params": {"repo": "agent-ops", "number": 2}, "ack": True}
+        blocked = client.post("/actions/run", json=body, headers={"X-CSRF-Token": csrf}).json()
+        assert blocked["tripped"] and not blocked["ok"]
+        assert any(v["id"] == "merge_ci_unavailable" for v in blocked["verdicts"])
+        assert not merge.called
+        # 403 をキャッシュしないので、権限を直すと「取得不可」から復帰する。
+        checks.respond(200, json={"check_runs": [{"status": "completed", "conclusion": "success"}]})
+        recovered = client.get("/repo/agent-ops")
+        assert recovered.status_code == 200 and ">合格</text>" in recovered.text
+        assert ">取得不可</text>" not in recovered.text
+
+
+@pytest.mark.parametrize("check_status, detail_status", [(401, 200), (404, 200), (500, 200), (403, 403)])
+def test_other_github_errors_are_not_hidden(check_status, detail_status):
+    with respx.mock(assert_all_called=False) as router:
+        _mock_agent_ops(check_status, detail_status, router)
+        src = GitHubSource("t", "h-takaha")
+        with pytest.raises(GitHubError) as caught:
+            asyncio.run(src.repo_view("agent-ops"))
+    assert caught.value.status == (detail_status if detail_status != 200 else check_status)
+
+
+@respx.mock
+def test_empty_checks_are_none_not_unavailable():
+    _mock_agent_ops(check_status=200)
+    src = GitHubSource("t", "h-takaha")
+    assert asyncio.run(src.repo_view("agent-ops")).pulls[0].ci == "none"
 
 
 @respx.mock

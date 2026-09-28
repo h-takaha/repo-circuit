@@ -34,6 +34,25 @@ def test_merge_pending_trips():
     assert ids("merge_pr", {"number": 9}, view("deck-studio"))["merge_ci_pending"] == TRIP
 
 
+def test_merge_unavailable_trips():
+    v = view()
+    v.pulls[0].ci = "unavailable"
+    got = ids("merge_pr", {"number": v.pulls[0].number}, v)
+    assert got["merge_ci_unavailable"] == TRIP
+    assert "merge_no_ci" not in got
+    assert "merge_ci_unavailable" not in ids("close_pr", {"number": v.pulls[0].number}, v)
+
+
+@pytest.mark.parametrize("ci", ["success", "failure", "pending", "none"])
+def test_available_checks_do_not_trip_unavailable_rule(ci):
+    v = view()
+    v.pulls[0].ci = ci
+    got = ids("merge_pr", {"number": v.pulls[0].number}, v)
+    assert "merge_ci_unavailable" not in got
+    if ci == "none":
+        assert got["merge_no_ci"] == WARN
+
+
 def test_merge_conflict_trips():
     v = view()
     v.pulls[0].mergeable_state = "dirty"

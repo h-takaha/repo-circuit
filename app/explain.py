@@ -6,7 +6,7 @@ from .circuit import RUST_DAYS
 from .issues import KINDS, PRIORITIES, board_state, branch_linked_issue, branch_name_for, linked_issue, wire_for
 from .model import RepoView
 
-CI_WORD = {"success": "合格（緑）", "failure": "失敗（赤）", "pending": "検査中（黄）", "none": "検査なし"}
+CI_WORD = {"success": "合格（緑）", "failure": "失敗（赤）", "pending": "検査中（黄）", "none": "検査なし", "unavailable": "取得不可"}
 
 
 def summary(view: RepoView) -> dict:
@@ -16,6 +16,7 @@ def summary(view: RepoView) -> dict:
     fail = [p for p in view.pulls if p.ci == "failure" or p.mergeable_state == "dirty"]
     ready = [p for p in view.pulls if p.ci == "success" and p.mergeable_state != "dirty" and not p.draft]
     pending = [p for p in view.pulls if p.ci == "pending"]
+    unavailable = [p for p in view.pulls if p.ci == "unavailable"]
     lag = view.run_behind
     lagging = view.local.run_exists and (lag is None or lag >= 3)
 
@@ -40,6 +41,10 @@ def summary(view: RepoView) -> dict:
         parts.append(f"検査中のスイッチが{len(pending)}つ。")
         if nxt == "やることはありません":
             nxt = "検査が終わるのを待つ"
+    if unavailable:
+        parts.append(f"検査ランプが取得不可のスイッチが{len(unavailable)}つ。アプリからは合流できません。")
+        if nxt == "やることはありません":
+            nxt = "検査結果の読み取り権限を確認"
     if view.local.dev_unpushed:
         parts.append(f"作業台に GitHub へ送っていない変更が{view.local.dev_unpushed}つ。")
     unwired = [i for i in open_issues if board_state(view, i) == "unwired"]
@@ -51,7 +56,7 @@ def summary(view: RepoView) -> dict:
     led = "red" if fail else ("yellow" if pending else ("green" if ready else "off"))
     return {
         "name": view.name,
-        "alert": bool(fail or rust or lagging),
+        "alert": bool(fail or rust or lagging or unavailable),
         "led": led,
         "sentence": "".join(parts),
         "issues": len(open_issues),
@@ -76,12 +81,15 @@ def status_text(view: RepoView) -> str:
     n = len(view.branches)
     ready = sum(1 for p in view.pulls if p.ci == "success" and p.mergeable_state != "dirty")
     fail = sum(1 for p in view.pulls if p.ci == "failure")
+    unavailable = sum(1 for p in view.pulls if p.ci == "unavailable")
     rust = sum(1 for b in view.branches if not view.pull_for(b.name) and b.idle_days >= RUST_DAYS)
     out = [f"{view.name} には、幹線に合流していない分岐が {n} 本あります。" if n else f"{view.name} の分岐はすべて幹線に合流済みです。"]
     if ready:
         out.append(f"合流の準備ができたスイッチが {ready} つ（検査ランプ緑）。")
     if fail:
         out.append(f"自動チェックが失敗中のスイッチが {fail} つ。")
+    if unavailable:
+        out.append(f"検査ランプが取得不可のスイッチが {unavailable} つ。取得不可の間はアプリから合流できません。")
     if rust:
         out.append(f"{RUST_DAYS} 日以上放置された分岐が {rust} 本。")
     loc = view.local
@@ -199,7 +207,8 @@ def parts(view: RepoView) -> dict[str, dict]:
             "body": {"success": "自動テストが全部通りました。閉じても安全というサインです。",
                      "failure": "自動テストが失敗しています。GitHub で失敗ログを読み、分岐に修正をはんだ付けすると、ランプは自動で再検査されます。",
                      "pending": "自動テストの実行中です。終わるまでスイッチは閉じられません。",
-                     "none": "この回路には自動テストが設定されていません。"}.get(pr.ci, ""),
+                     "none": "この回路には自動テストが設定されていません。",
+                     "unavailable": "GitHub の検査結果を取得できません（Checks API が 403）。検査なしとは異なります。取得不可の間はブレーカーがアプリからの合流を止めます。"}.get(pr.ci, ""),
             "cmd": f"gh pr checks {pr.number}",
             "url": pr.url + "/checks" if pr.url else "",
             "actions": led_acts,

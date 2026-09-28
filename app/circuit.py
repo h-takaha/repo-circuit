@@ -136,7 +136,7 @@ def _branch(s: Scene, view: RepoView, b: Branch, jx: float, y: float, rx: float 
         s.paths.append({"d": f"M{cx:.0f} {y:.0f}H{rx:.0f}V{s.bus_y}", "cls": wire_cls})
         led_cls = {"success": "led-g", "failure": "led-r", "pending": "led-y"}.get(pr.ci, "led-off")
         s.leds.append({"x": pivot + 22, "y": y - 50, "cls": led_cls})
-        s.texts.append({"x": pivot + 36, "y": y - 46, "t": {"success": "合格", "failure": "失敗", "pending": "検査中"}.get(pr.ci, "検査なし"), "cls": "lbl"})
+        s.texts.append({"x": pivot + 36, "y": y - 46, "t": {"success": "合格", "failure": "失敗", "pending": "検査中", "unavailable": "取得不可"}.get(pr.ci, "検査なし"), "cls": "lbl"})
         s.texts.append({"x": pivot + 22, "y": y + 32, "t": f"スイッチ #{pr.number}", "cls": "lblm mid"})
         s.hits.append({"x": pivot + 6, "y": y - 66, "w": 72, "h": 30, "part": f"led:{pr.number}", "label": f"検査ランプ #{pr.number}"})
         s.hits.append({"x": pivot - 10, "y": y - 32, "w": 64, "h": 46, "part": f"pr:{pr.number}", "label": f"スイッチ #{pr.number}"})
