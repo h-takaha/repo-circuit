@@ -3,6 +3,12 @@
 {% block content %}
 <div class="cwrap">
   <aside class="ctray">
+    {% if view.local.dev_exists %}
+    <button type="button" class="chipbtn {{ 'unwired' if view.local.merged else 'done' }}" data-part="cleanup">
+      <span class="mono" style="font-size:12px;font-weight:600">作業台の片付け · {{ view.local.merged|length }}本</span>
+      <span style="font-size:14px;font-weight:500;line-height:1.45">{{ '幹線に入りきった手元の分岐が残っています' if view.local.merged else '片付けるものはありません' }}</span>
+    </button>
+    {% endif %}
     <div class="kicker">部品トレイ · {{ view.name }} の付箋</div>
     {% for c in chips %}
     <button type="button" class="chipbtn {{ c.state }}" data-part="{{ c.part }}">

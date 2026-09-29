@@ -6,7 +6,7 @@ from app.commands import command, delete_local, push_local, q, safe_ref, switch_
 from app.demo import DemoSource
 from app.explain import parts
 from app.guards import ACTIONS
-from app.model import LocalBranch, Commit, now
+from app.model import Commit, LocalBranch, MergedBranch, now
 from app.service import Service
 
 SAMPLE = {"repo": "event-calendar", "title": "T", "number": 7, "name": "fix/1-x", "head": "fix/1-x"}
@@ -83,7 +83,7 @@ def test_terminal_only_buttons_for_the_workbench():
     v.local.dev_branch = "main"
     v.local.branches = [LocalBranch(b.name, "abc", unpushed=2, on_github=True)]
     labels = {a["label"]: a for a in parts(v)[f"branch:{b.name}"]["actions"] if a.get("terminal")}
-    assert set(labels) == {"GitHub に送る（push）", "作業台をこの分岐に切り替える", "作業台のこの分岐を消す（未合流なら git が断る）"}
+    assert set(labels) == {"GitHub に送る（push）", "作業台をこの分岐に切り替える"}  # 手元の分岐の削除は「作業台の片付け」だけ
     assert labels["作業台をこの分岐に切り替える"]["cmd"] == f'git -C "{WD}" switch {b.name}'
     assert all("action" not in a and "params" not in a for a in labels.values())  # /actions/* には送られない
 
@@ -120,3 +120,33 @@ def test_tray_shows_the_issue_command_before_submitting(client):
     assert 'id="issue-copy"' in html
     assert "/static/tray.js" in html
     assert client.get("/static/tray.js").status_code == 200
+
+
+def test_cleanup_part_lists_merged_leftovers_with_terminal_delete_buttons():
+    v = asyncio.run(DemoSource().repo_view("event-calendar"))
+    v.local.dev_dir = WD
+    p = parts(v)["cleanup"]
+    assert p["title"] == "作業台の片付け" and "2 本" in p["body"]
+    labels = [a["label"] for a in p["actions"]]
+    assert all(a.get("terminal") and "action" not in a for a in p["actions"])
+    assert [a["cmd"] for a in p["actions"]] == [f'git -C "{WD}" branch -d fix/9-old-icon', f'git -C "{WD}" branch -d fix/11-typo']
+    assert "GitHub にも同名の分岐が残っています" in labels[1] and "GitHub にも" not in labels[0]
+
+
+def test_cleanup_part_caps_the_list_and_handles_empty_and_no_workbench():
+    v = asyncio.run(DemoSource().repo_view("event-calendar"))
+    base = v.local.merged[0]
+    v.local.merged = [MergedBranch(f"old/{i}", base.head, now(), fresh=(i == 0)) for i in range(12)]
+    p = parts(v)["cleanup"]
+    assert len(p["actions"]) == 10 and "12 本" in p["body"] and "10 本を出しています" in p["body"]
+    assert "作ったばかり" in p["actions"][0]["label"] and "作ったばかり" not in p["actions"][1]["label"]
+    v.local.merged = []
+    p = parts(v)["cleanup"]
+    assert p["actions"] == [] and "ありません" in p["body"]
+    v.local.dev_exists = False
+    assert "cleanup" not in parts(v)
+
+
+def test_circuit_page_has_the_cleanup_chip(client):
+    html = client.get("/repo/event-calendar").text
+    assert 'data-part="cleanup"' in html and "作業台の片付け · 2本" in html

@@ -127,3 +127,44 @@ def test_light_read_for_panel_counts_totals_without_branch_details(lab):
     assert st.dev_branch == "feat" and st.dev_uncommitted == 1
     assert st.unpushed_total == 3  # feat の 1 ＋ local-only の 2
     assert st.branches == []  # 分岐ごとには読まない
+
+
+def _tidy_lab(lab):
+    """main を1つ進めて push し、幹線に入りきった分岐を3本作る（old-done / just-made / busy）。busy は別の作業場所で使用中。"""
+    root, heads = lab
+    dev = root / "git" / "tool"
+    git(dev, "stash", "-q")
+    git(dev, "switch", "-q", "main")
+    commit(dev, "d.txt", "1")
+    # push はしない（複製元の origin を他のテストと共有しているため）。fetch 済みの状態を、手元の origin/main を進めて再現する
+    git(dev, "update-ref", "refs/remotes/origin/main", "HEAD")
+    git(dev, "branch", "old-done", heads["main"])  # 幹線に入りきり済み。先端は幹線の先端と別
+    git(dev, "branch", "just-made", "main")  # 先端が幹線の先端と同じ = 作ったばかり
+    git(dev, "branch", "busy", heads["main"])
+    git(dev, "worktree", "add", "-q", str(root / "wt"), "busy")
+    return root, heads, dev
+
+
+def test_merged_leftovers_are_listed_for_cleanup_but_not_drawn(lab):
+    root, heads, _ = _tidy_lab(lab)
+    st = read_local_state(root / "git", root / "run", "tool", remote_heads={**heads, "old-done": heads["main"]}, default_branch="main")
+    by = {m.name: m for m in st.merged}
+    # 除外: 既定分岐と今いる分岐（main）、別の作業場所で使用中（busy）、幹線に入りきっていない分岐（feat / local-only）
+    assert set(by) == {"old-done", "just-made"}
+    assert by["just-made"].fresh and not by["old-done"].fresh
+    assert by["old-done"].on_github and not by["just-made"].on_github
+    assert not {"old-done", "just-made"} & {b.name for b in st.branches}  # 回路図の分岐には入れない
+
+
+def test_current_branch_is_never_a_cleanup_candidate(lab):
+    root, heads, dev = _tidy_lab(lab)
+    git(dev, "switch", "-q", "old-done")
+    st = read_local_state(root / "git", root / "run", "tool", remote_heads=heads, default_branch="main")
+    assert "old-done" not in {m.name for m in st.merged} and st.dev_branch == "old-done"
+
+
+def test_cleanup_reading_changes_nothing(lab):
+    root, heads, dev = _tidy_lab(lab)
+    before = (git(dev, "for-each-ref", "refs"), git(dev, "worktree", "list"), git(dev, "rev-parse", "HEAD"))
+    read_local_state(root / "git", root / "run", "tool", remote_heads=heads, default_branch="main")
+    assert before == (git(dev, "for-each-ref", "refs"), git(dev, "worktree", "list"), git(dev, "rev-parse", "HEAD"))

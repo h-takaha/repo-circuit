@@ -6,7 +6,7 @@ import copy
 import hashlib
 from datetime import timedelta
 
-from .model import Branch, Commit, Issue, LocalBranch, LocalState, PullRequest, RepoView, now
+from .model import Branch, Commit, Issue, LocalBranch, LocalState, MergedBranch, PullRequest, RepoView, now
 
 
 def _sha(seed: str) -> str:
@@ -97,6 +97,10 @@ def build_demo() -> dict[str, RepoView]:
             LocalBranch("fix/14-csv-encoding", b[1].sha, on_github=True),
             LocalBranch("fix/12-button-size", unsent[-1].sha, unpushed=1, on_github=True, commits=unsent),
             LocalBranch("exp/local-idea", idea[-1].sha, unpushed=2, commits=idea, base=main[-1].sha, last_date=idea[-1].date),
+        ],
+        merged=[
+            MergedBranch("fix/9-old-icon", main[-3].sha, main[-3].date),
+            MergedBranch("fix/11-typo", main[-2].sha, main[-2].date, on_github=True),
         ],
     )
     views[r].pulls = [
