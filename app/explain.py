@@ -190,6 +190,8 @@ def parts(view: RepoView) -> dict[str, dict]:
             "actions": _term("GitHub に送る（push）", push_local(wd, lb.name, True))
                        + ([] if here else _term("作業台をこの分岐に切り替える", switch_local(wd, lb.name))),
         }
+    if loc.dev_exists:
+        out["cleanup"] = _cleanup_part(view, wd)
     commits = {c.sha: c for c in view.main_commits}
     for b in view.branches:
         for c in b.commits:
@@ -221,7 +223,6 @@ def parts(view: RepoView) -> dict[str, dict]:
                 acts += _term("GitHub に送る（push）", push_local(wd, lb.name, False))
             if not here_now:
                 acts += _term("作業台をこの分岐に切り替える", switch_local(wd, lb.name))
-                acts += _term("作業台のこの分岐を消す（未合流なら git が断る）", delete_local(wd, lb.name))
         rusty = not pr and b.idle_days >= RUST_DAYS
         out[f"branch:{b.name}"] = {
             "title": ("錆びた分岐 " if rusty else "分岐 ") + b.name,
@@ -264,6 +265,32 @@ def parts(view: RepoView) -> dict[str, dict]:
     for part in out.values():
         _attach_commands(part, view)
     return out
+
+
+CLEANUP_SHOWN = 10
+
+
+def _cleanup_part(view: RepoView, wd: str) -> dict:
+    """幹線に入りきっているのに作業台に残っている分岐。回路図には描かない済んだ分岐を、ここで片付ける。"""
+    left = view.local.merged
+    if not left:
+        body = "幹線に入りきっているのに、作業台に残っている分岐はありません。"
+    else:
+        body = (f"幹線に入りきっているのに、作業台に残っている分岐が {len(left)} 本あります。中身はすべて幹線にあるので、消しても作業は失われません。"
+                "今いる分岐と、別の作業場所（worktree）で使っている分岐は含めていません。"
+                "このアプリは作業台に書き込まないので、消すのはあなたのターミナルから行います（「ターミナルから実行」でコマンドをコピーできます）。"
+                "幹線に入りきっていない分岐は、git が断ります。"
+                + (f"ここには新しい順に {CLEANUP_SHOWN} 本を出しています。片付けると次の分岐が出ます。" if len(left) > CLEANUP_SHOWN else ""))
+    acts: list[dict] = []
+    for b in left[:CLEANUP_SHOWN]:
+        notes = ("・GitHub にも同名の分岐が残っています" if b.on_github else "") + ("・作ったばかりで、まだ何もはんだ付けしていないかもしれません" if b.fresh else "")
+        acts += _term(f"{b.name}（最終 {b.date:%Y-%m-%d}）を消す{notes}", delete_local(wd, b.name))
+    return {
+        "title": "作業台の片付け",
+        "term": "ローカルブランチ（幹線に入りきり済み）",
+        "body": body,
+        "actions": acts,
+    }
 
 
 def _attach_commands(part: dict, view: RepoView) -> None:

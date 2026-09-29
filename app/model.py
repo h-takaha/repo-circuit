@@ -98,6 +98,17 @@ class LocalBranch:
 
 
 @dataclass
+class MergedBranch:
+    """幹線に入りきっているのに、作業台に残っている分岐（片付け待ち）。"""
+
+    name: str
+    head: str
+    date: datetime
+    on_github: bool = False  # GitHub にも同名の分岐が残っている
+    fresh: bool = False  # 先端が幹線の先端と同じ（作ったばかりで、まだ何もはんだ付けしていない可能性）
+
+
+@dataclass
 class LocalState:
     """作業台（開発 repo）と本番（稼働クローン）の位置。読み取り専用で集める。"""
 
@@ -108,6 +119,7 @@ class LocalState:
     dev_branch: str = ""  # 今いる分岐（detached なら空）
     dev_uncommitted: int = 0  # まだコミットしていないファイルの数
     branches: list[LocalBranch] = field(default_factory=list)
+    merged: list[MergedBranch] = field(default_factory=list)  # 片付け待ち（新しい順。今いる分岐・既定分岐・別の作業場所で使用中の分岐は除く）
     unpushed_total: int | None = None  # 軽い読み取り（配電盤）のときだけ: どの origin/* にも無いはんだ点の合計
     run_exists: bool = False
     run_head: str = ""

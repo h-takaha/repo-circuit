@@ -11,7 +11,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .model import Commit, LocalBranch, LocalState
+from .model import Commit, LocalBranch, LocalState, MergedBranch
 
 _TIMEOUT = 3
 
@@ -34,6 +34,7 @@ def _git(cwd: Path, *args: str) -> str | None:
 
 
 MAX_LOCAL_BRANCHES = 10
+MAX_MERGED_READ = 60
 MAX_UNPUSHED_DOTS = 5
 
 
@@ -67,6 +68,7 @@ def read_local_state(
                 st.dev_unpushed = b.unpushed
             if b.name != default_branch:
                 st.branches.append(b)
+        st.merged = _merged_leftovers(dev, default_branch, st.dev_branch, heads)
     return _read_run(st, lab_run / repo, ignore_dirty)
 
 
@@ -120,6 +122,28 @@ def _local_branches(dev: Path, heads: dict[str, str], default: str, current: str
         if must in all_refs and must not in names:
             names.append(must)
     return [_local_branch(dev, n, all_refs[n], heads.get(n), base) for n in names]
+
+
+def _busy_branches(dev: Path) -> set[str]:
+    """どこかの作業場所（worktree）で開かれている分岐。git は切り替えも削除も断る。"""
+    out = _git(dev, "worktree", "list", "--porcelain") or ""
+    prefix = "branch refs/heads/"
+    return {line[len(prefix):] for line in out.splitlines() if line.startswith(prefix)}
+
+
+def _merged_leftovers(dev: Path, default: str, current: str, heads: dict[str, str]) -> list[MergedBranch]:
+    """幹線に入りきった手元の分岐（片付け待ち）。回路図には描かず、「作業台の片付け」だけが使う。
+    判定は fetch していない origin/<既定分岐> で行う。古くても「入りきっていない分岐を入りきっている」とは誤判定しない。"""
+    base = f"origin/{default}"
+    tip = _git(dev, "rev-parse", "--verify", "--quiet", base)
+    if not tip:
+        return []
+    out = _git(dev, "for-each-ref", "refs/heads", f"--merged={base}", "--sort=-committerdate",
+               "--format=%(refname:short)%00%(objectname)%00%(committerdate:iso-strict)") or ""
+    skip = _busy_branches(dev) | {current, default}
+    rows = [line.split("\0") for line in out.splitlines() if line.count("\0") == 2]
+    return [MergedBranch(name=n, head=h, date=_date(d), on_github=n in heads, fresh=h == tip)
+            for n, h, d in rows if n not in skip][:MAX_MERGED_READ]
 
 
 def _local_branch(dev: Path, name: str, head: str, remote: str | None, base: str) -> LocalBranch:
