@@ -31,6 +31,12 @@
       <div><span class="num">{{ r.branches }}</span><span class="cap">分岐</span></div>
       <div><span class="num">{{ r.prs }}</span><span class="cap">スイッチ</span></div>
       <div><span class="num" style="font-size:15px;padding-top:4px">{{ r.deploy }}</span><span class="cap">本番</span></div>
+      <div class="devcount" title="作業台（この PC）: 未コミット {{ r.uncommitted }} / 未送電 {{ r.unpushed }}">
+        {% if not r.dev_exists %}<span class="num" style="font-size:15px;padding-top:4px">—</span>
+        {% elif r.uncommitted or r.unpushed %}<span class="num devn">{% if r.uncommitted %}<span>{{ r.uncommitted }}<small>未コミット</small></span>{% endif %}{% if r.unpushed %}<span>{{ r.unpushed }}<small>未送電</small></span>{% endif %}</span>
+        {% else %}<span class="num" style="font-size:15px;padding-top:4px">済</span>{% endif %}
+        <span class="cap">作業台</span>
+      </div>
     </div>
     <div class="nextact"><span class="cap">次にやると良いこと</span><span style="font-size:14px;font-weight:500">{{ r.next }}</span></div>
   </a>

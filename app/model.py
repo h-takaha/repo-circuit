@@ -65,6 +65,7 @@ class PullRequest:
     ci: str  # success / failure / pending / none / unavailable
     mergeable_state: str  # clean / dirty / blocked / unknown ...
     url: str = ""
+    merge_commit_sha: str = ""  # 合流済みなら幹線にできたはんだ点
 
 
 @dataclass
@@ -83,12 +84,29 @@ class Branch:
 
 
 @dataclass
+class LocalBranch:
+    """作業台の分岐1本。GitHub の分岐の位置と比べて、送っていないはんだ点を数える。"""
+
+    name: str
+    head: str
+    unpushed: int = 0  # GitHub の分岐より進んでいる数（GitHub に無い分岐なら幹線より進んでいる数）
+    on_github: bool = False
+    github_ahead: bool = False  # GitHub 側に作業台に無いはんだ点がある（fetch していない）
+    commits: list[Commit] = field(default_factory=list)  # 未 push のはんだ点（古い順・最大5）
+    base: str = ""  # GitHub に無い分岐の、幹線からの引き出し位置（merge-base）
+    last_date: datetime = field(default_factory=now)
+
+
+@dataclass
 class LocalState:
     """作業台（開発 repo）と本番（稼働クローン）の位置。読み取り専用で集める。"""
 
     dev_exists: bool = False
     dev_head: str = ""
-    dev_unpushed: int = 0
+    dev_unpushed: int = 0  # 今いる分岐の未 push 数
+    dev_branch: str = ""  # 今いる分岐（detached なら空）
+    dev_uncommitted: int = 0  # まだコミットしていないファイルの数
+    branches: list[LocalBranch] = field(default_factory=list)
     run_exists: bool = False
     run_head: str = ""
     run_dirty: bool = False
@@ -123,6 +141,12 @@ class RepoView:
         for i in self.issues:
             if i.number == number:
                 return i
+        return None
+
+    def local_branch(self, name: str) -> LocalBranch | None:
+        for b in self.local.branches:
+            if b.name == name:
+                return b
         return None
 
     @property

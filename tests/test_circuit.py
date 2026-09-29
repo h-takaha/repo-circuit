@@ -18,7 +18,7 @@ def _segments(scene):
 
     segs = []
     for p in scene.paths:
-        if p["cls"] not in ("w", "rust"):
+        if p["cls"] not in ("w", "rust", "dev"):
             continue
         m = re.fullmatch(r"M(\d+) (\d+)V(\d+)H(\d+)", p["d"])
         if m:
@@ -51,9 +51,20 @@ def test_branch_wires_do_not_cross():
 
 def test_markers_and_switches_present():
     s = layout(view())
-    assert {h["part"] for h in s.hits} >= {"bus", "lamp", "run", "dev", "pr:5", "pr:6", "issue:12", "issue:14"}
+    assert {h["part"] for h in s.hits} >= {"bus", "lamp", "run", "local:exp/local-idea", "pr:5", "pr:6", "issue:12", "issue:14"}
     assert len(s.switches) == 2 and len(s.flows) == 2
     assert any(d["cls"] == "commit-pending" for d in s.dots)  # 本番に届いていないはんだ点
+    assert sum(d["cls"] == "commit-dev" for d in s.dots) == 3  # 未送電: ボタンの分岐に1、作業台だけの分岐に2
+    assert any(t["t"] == "作業台のみ · 未送電 2" for t in s.texts)
+    assert "dev" not in {h["part"] for h in s.hits}  # 分岐で作業中なので、幹線の上の作業台旗は出さない
+
+
+def test_dev_flag_on_bus_only_when_working_on_main():
+    v = view()
+    v.local.dev_branch, v.local.dev_unpushed = "main", 2
+    s = layout(v)
+    assert "dev" in {h["part"] for h in s.hits}
+    assert any("作業台 · 未送電 2" == t["t"] for t in s.texts)
 
 
 def test_board_state_and_fixes():
