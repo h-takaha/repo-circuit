@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .circuit import RUST_DAYS
+from .commands import command
 from .issues import KINDS, PRIORITIES, board_state, branch_linked_issue, branch_name_for, linked_issue, wire_for
 from .model import RepoView
 from .pipeline import local_totals
@@ -256,7 +257,16 @@ def parts(view: RepoView) -> dict[str, dict]:
         }
     for issue in view.issues:
         out[f"issue:{issue.number}"] = issue_part(view, issue)
+    for part in out.values():
+        _attach_commands(part, view)
     return out
+
+
+def _attach_commands(part: dict, view: RepoView) -> None:
+    """各操作ボタンに「コマンドで言うと」の文字列を付ける。入力欄は既定値で埋めた形（実際の値は確認画面で見える）。"""
+    for a in part.get("actions", []):
+        defaults = {f["name"]: f["value"] for f in a["fields"]}
+        a["cmd"] = command(a["action"], {**a["params"], **defaults}, view.default_branch)
 
 
 def issue_part(view: RepoView, issue) -> dict:
