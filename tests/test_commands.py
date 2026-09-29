@@ -129,7 +129,8 @@ def test_cleanup_part_lists_merged_leftovers_with_terminal_delete_buttons():
     assert p["title"] == "作業台の片付け" and "2 本" in p["body"]
     labels = [a["label"] for a in p["actions"]]
     assert all(a.get("terminal") and "action" not in a for a in p["actions"])
-    assert [a["cmd"] for a in p["actions"]] == [f'git -C "{WD}" branch -d fix/9-old-icon', f'git -C "{WD}" branch -d fix/11-typo']
+    assert [a["cmd"] for a in p["actions"]] == [
+        f'git -C "{WD}" branch -d fix/9-old-icon', f'git -C "{WD}" branch -d fix/11-typo', f'git -C "{WD}" remote prune origin']  # 最後は古い記録の掃除
     assert "GitHub にも同名の分岐が残っています" in labels[1] and "GitHub にも" not in labels[0]
 
 
@@ -137,12 +138,13 @@ def test_cleanup_part_caps_the_list_and_handles_empty_and_no_workbench():
     v = asyncio.run(DemoSource().repo_view("event-calendar"))
     base = v.local.merged[0]
     v.local.merged = [MergedBranch(f"old/{i}", base.head, now(), fresh=(i == 0)) for i in range(12)]
+    v.local.stale_origin = []
     p = parts(v)["cleanup"]
     assert len(p["actions"]) == 10 and "12 本" in p["body"] and "10 本を出しています" in p["body"]
     assert "作ったばかり" in p["actions"][0]["label"] and "作ったばかり" not in p["actions"][1]["label"]
     v.local.merged = []
     p = parts(v)["cleanup"]
-    assert p["actions"] == [] and "ありません" in p["body"]
+    assert p["actions"] == [] and "ありません" in p["body"] and "古い記録" not in p["body"]
     v.local.dev_exists = False
     assert "cleanup" not in parts(v)
 
@@ -150,3 +152,20 @@ def test_cleanup_part_caps_the_list_and_handles_empty_and_no_workbench():
 def test_circuit_page_has_the_cleanup_chip(client):
     html = client.get("/repo/event-calendar").text
     assert 'data-part="cleanup"' in html and "作業台の片付け · 2本" in html
+
+
+def test_cleanup_part_offers_one_prune_button_for_stale_origin_refs():
+    v = asyncio.run(DemoSource().repo_view("event-calendar"))
+    v.local.dev_dir = WD
+    v.local.merged = []
+    v.local.stale_origin = ["a", "b"]
+    p = parts(v)["cleanup"]
+    assert "2 個" in p["body"] and "a、b" in p["body"]
+    assert [(a["label"], a["cmd"]) for a in p["actions"]] == [("古い GitHub のコピー（origin/…）をまとめて掃除する", f'git -C "{WD}" remote prune origin')]
+    v.local.stale_origin = []
+    assert parts(v)["cleanup"]["actions"] == []
+
+
+def test_circuit_chip_counts_stale_refs(client):
+    html = client.get("/repo/event-calendar").text
+    assert "作業台の片付け · 2本 · 古い記録 1個" in html

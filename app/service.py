@@ -28,7 +28,8 @@ class Service:
         if v.head_sha:
             heads[v.default_branch] = v.head_sha
         v.local = await asyncio.to_thread(
-            read_local_state, self.settings.lab_git_dir, self.settings.lab_run_dir, name, ignore, heads, v.default_branch, detail
+            read_local_state, self.settings.lab_git_dir, self.settings.lab_run_dir, name, ignore, heads, v.default_branch, detail,
+            set(v.github_names) if v.github_names is not None else None,
         )
         return v
 

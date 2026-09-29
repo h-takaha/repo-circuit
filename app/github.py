@@ -151,6 +151,7 @@ class GitHubSource:
             pulls=list(pulls),
             issues=issues,
             closed_pulls=closed,
+            github_names=[b["name"] for b in branches_raw] if len(branches_raw) < 100 else None,
             url=meta.get("html_url", ""),
         )
 

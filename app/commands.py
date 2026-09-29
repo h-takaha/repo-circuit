@@ -43,6 +43,11 @@ def delete_local(workdir: str, name: str) -> str:
     return _git(workdir, "branch", "-d", name) if safe_ref(name) else ""
 
 
+def prune_origin(workdir: str) -> str:
+    """GitHub にはもう無い分岐の、手元の古い記録（origin/…）だけを消す。fetch はしない。"""
+    return _git(workdir, "remote", "prune", "origin")
+
+
 def push_local(workdir: str, name: str, first_time: bool) -> str:
     if not safe_ref(name):
         return ""

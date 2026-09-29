@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .circuit import RUST_DAYS
-from .commands import command, default_workdir, delete_local, push_local, switch_local
+from .commands import command, default_workdir, delete_local, prune_origin, push_local, switch_local
 from .issues import KINDS, PRIORITIES, board_state, branch_linked_issue, branch_name_for, linked_issue, wire_for
 from .model import RepoView
 from .pipeline import local_totals
@@ -273,6 +273,7 @@ CLEANUP_SHOWN = 10
 def _cleanup_part(view: RepoView, wd: str) -> dict:
     """幹線に入りきっているのに作業台に残っている分岐。回路図には描かない済んだ分岐を、ここで片付ける。"""
     left = view.local.merged
+    stale = view.local.stale_origin
     if not left:
         body = "幹線に入りきっているのに、作業台に残っている分岐はありません。"
     else:
@@ -281,10 +282,16 @@ def _cleanup_part(view: RepoView, wd: str) -> dict:
                 "このアプリは作業台に書き込まないので、消すのはあなたのターミナルから行います（「ターミナルから実行」でコマンドをコピーできます）。"
                 "幹線に入りきっていない分岐は、git が断ります。"
                 + (f"ここには新しい順に {CLEANUP_SHOWN} 本を出しています。片付けると次の分岐が出ます。" if len(left) > CLEANUP_SHOWN else ""))
+    if stale:
+        names = "、".join(stale[:CLEANUP_SHOWN]) + ("…" if len(stale) > CLEANUP_SHOWN else "")
+        body += (f"また、作業台にある GitHub のコピー（origin/…）に、GitHub にはもう無い古い記録が {len(stale)} 個あります（{names}）。"
+                 "GitHub 側で分岐を撤去しても、手元の記録は自動では消えません。1つのコマンドでまとめて片付きます（手元の分岐やファイルは変わりません）。")
     acts: list[dict] = []
     for b in left[:CLEANUP_SHOWN]:
         notes = ("・GitHub にも同名の分岐が残っています" if b.on_github else "") + ("・作ったばかりで、まだ何もはんだ付けしていないかもしれません" if b.fresh else "")
         acts += _term(f"{b.name}（最終 {b.date:%Y-%m-%d}）を消す{notes}", delete_local(wd, b.name))
+    if stale:
+        acts += _term("古い GitHub のコピー（origin/…）をまとめて掃除する", prune_origin(wd))
     return {
         "title": "作業台の片付け",
         "term": "ローカルブランチ（幹線に入りきり済み）",
