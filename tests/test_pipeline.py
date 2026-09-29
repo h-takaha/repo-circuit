@@ -64,3 +64,36 @@ def test_github_ahead_is_not_counted_as_done():
     lb = v.local_branch("fix/14-csv-encoding")
     lb.github_ahead = True
     assert _row(rows(v), "fix/14-csv-encoding")["push"] == ("na", "GitHub が先行")
+
+
+def test_merged_branch_left_on_github_is_shown_once():
+    from app.model import Branch, now
+
+    v = view()
+    # 合流後も GitHub に残っている分岐（幹線より進んでいない）。スイッチを付ける案内は出さない
+    v.branches.append(Branch("fix/9-log-format", v.main_commits[-1].sha, 0, 0, [], v.main_commits[-1].sha, now()))
+    names = [r["name"] for r in rows(v)]
+    assert names.count("fix/9-log-format") == 1
+    assert _row(rows(v), "fix/9-log-format")["merge"] == ("ok", "済")
+
+
+def test_branch_without_new_commits_does_not_ask_for_a_switch():
+    from app.model import Branch, now
+
+    v = view()
+    v.branches.append(Branch("exp/empty", v.main_commits[-1].sha, 0, 0, [], v.main_commits[-1].sha, now()))
+    r = _row(rows(v), "exp/empty")
+    assert r["switch"][0] == "off" and "撤去" in r["_next"]
+
+
+def test_current_branch_is_shown_even_if_it_was_merged_before():
+    from app.model import LocalBranch
+
+    v = view()
+    # 合流して GitHub から撤去済みの分岐に、作業台でまた変更を入れている
+    v.local.dev_branch, v.local.dev_uncommitted = "fix/10-holiday", 3
+    v.local.branches.append(LocalBranch("fix/10-holiday", "x" * 40))
+    rs = rows(v)
+    assert rs[0]["name"] == "fix/10-holiday" and rs[0]["here"]
+    r = _row(rs, "fix/10-holiday")
+    assert r["commit"] == ("todo", "未コミット 3") and r["push"] == ("off", "送るはんだ点なし")

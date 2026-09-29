@@ -49,7 +49,7 @@ def lab_template(tmp_path_factory, git_identity):
     commit(dev, "b.txt", "2")
     git(dev, "switch", "-q", "-c", "local-only", "main")
     commit(dev, "c.txt", "1")
-    commit(dev, "c.txt", "2")
+    commit(dev, "c.txt", "日本語の見出し")  # Windows の既定コードページで読むと壊れる文字
     git(dev, "switch", "-q", "feat")
     (dev / "b.txt").write_text("作業中", encoding="utf-8")
     return tmp_path, {"main": main, "feat": feat_pushed}
@@ -73,7 +73,7 @@ def test_reads_uncommitted_and_unpushed_per_branch(lab):
     assert [c.headline for c in by["feat"].commits] == ["b.txt: 2"]
     lo = by["local-only"]
     assert not lo.on_github and lo.unpushed == 2 and lo.base == heads["main"]
-    assert [c.headline for c in lo.commits] == ["c.txt: 1", "c.txt: 2"]  # 古い順
+    assert [c.headline for c in lo.commits] == ["c.txt: 1", "c.txt: 日本語の見出し"]  # 古い順・UTF-8 で読む
 
 
 def test_github_ahead_when_remote_sha_is_unknown_locally(lab):

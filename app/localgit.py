@@ -22,7 +22,9 @@ def _git(cwd: Path, *args: str) -> str | None:
             ["git", *args],
             cwd=cwd,
             capture_output=True,
-            text=True,
+            # git の出力は UTF-8。Windows の既定（cp932）で読むと日本語のコミット見出しで失敗する
+            encoding="utf-8",
+            errors="replace",
             timeout=_TIMEOUT,
             check=False,
         )

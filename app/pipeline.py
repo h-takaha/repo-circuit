@@ -56,8 +56,10 @@ def rows(view: RepoView) -> list[dict]:
     names += [b.name for b in view.branches if b.name not in names]
     merged_heads = {p.head for p in view.closed_pulls if p.merged}
     for name in names:
-        if view.branch(name) is None and name in merged_heads and not (view.local_branch(name) and view.local_branch(name).unpushed):
-            continue  # 合流して GitHub から撤去済みの分岐は、下の「合流済み」の行で見せる
+        gb, lb = view.branch(name), view.local_branch(name)
+        if (name in merged_heads and name != loc.dev_branch and (gb is None or gb.ahead == 0)
+                and not (lb and lb.unpushed) and not view.pull_for(name)):
+            continue  # 合流済みで新しいはんだ点の無い分岐（撤去済みも含む）は、下の「合流済み」の行で見せる
         row = _branch_row(view, name)
         if row:
             out.append(row)
@@ -109,8 +111,7 @@ def _branch_row(view: RepoView, name: str) -> dict | None:
     elif gb or (lb and lb.on_github):
         st["push"] = _stage("ok", "済" if lb else "GitHub のみ")
     elif lb:
-        st["push"] = _stage("todo", "作業台のみ")
-        nxt = nxt or f"GitHub へ送る（git push -u origin {name}）"
+        st["push"] = _stage("off", "送るはんだ点なし")  # 幹線から分けただけ、または合流後に GitHub から撤去された分岐
 
     if pr:
         st["switch"] = _stage("ok", f"#{pr.number}")
@@ -125,6 +126,8 @@ def _branch_row(view: RepoView, name: str) -> dict | None:
             nxt = nxt or {"failure": "検査ランプの失敗ログを見て、分岐に修正をはんだ付けする",
                           "pending": "検査が終わるのを待つ",
                           "unavailable": "検査結果を読める権限を用意する"}.get(pr.ci, "下書きを仕上げる")
+    elif gb and gb.ahead == 0 and not (lb and lb.unpushed):
+        nxt = nxt or "幹線に無いはんだ点がありません。はんだ付けするか、要らなければ分岐を撤去する"
     elif gb:
         st["switch"] = _stage("todo", "未")
         nxt = nxt or "スイッチを付ける（プルリクエスト作成）"
