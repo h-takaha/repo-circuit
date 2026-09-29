@@ -132,15 +132,14 @@ def _pr_less_branch(v):
     return next(b for b in v.branches if b.name not in heads)
 
 
-def test_create_pr_button_is_hidden_when_branch_has_nothing_ahead():
+def test_create_pr_button_stays_and_the_breaker_teaches_when_branch_has_nothing_ahead():
+    """進み 0 でもボタンは出す。押すと pr_no_diff のブレーカーが、なぜダメか・代わりに何をするかを教える。"""
+    from app.guards import TRIP, evaluate
+
     v = view()
     b = _pr_less_branch(v)
-    b.ahead = 1
-    part = parts(v)[f"branch:{b.name}"]
-    assert "create_pr" in [a["action"] for a in part["actions"]]
-    assert "付けられません" not in part["body"]
-
     b.ahead = 0
     part = parts(v)[f"branch:{b.name}"]
-    assert [a["action"] for a in part["actions"]] == ["delete_branch"]
-    assert "スイッチ（プルリクエスト）は付けられません" in part["body"]
+    assert "create_pr" in [a["action"] for a in part["actions"]]
+    got = {x.id: x for x in evaluate("create_pr", {"repo": v.name, "head": b.name, "title": "t", "body": "Fixes #1"}, v)}
+    assert got["pr_no_diff"].level == TRIP and got["pr_no_diff"].steps

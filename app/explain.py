@@ -207,7 +207,7 @@ def parts(view: RepoView) -> dict[str, dict]:
         issue = view.issue(n) if n else None
         lb = view.local_branch(b.name)
         acts = []
-        if not pr and b.ahead:
+        if not pr:
             default_title = issue.title if issue else b.name
             default_body = f"Fixes #{issue.number}" if issue else ""
             acts.append(_act("create_pr", "スイッチを付ける（プルリクエスト作成）", r, head=b.name, fields=[
@@ -228,8 +228,6 @@ def parts(view: RepoView) -> dict[str, dict]:
             "term": "ブランチ" + ("（放置）" if rusty else ""),
             "body": (f"幹線から引き出した作業用の配線。ここで何度はんだ付け（コミット）しても、幹線と本番には影響しません。"
                      f"幹線より {b.ahead} 進み、{b.behind} 遅れています。"
-                     + ("幹線に無いはんだ点がないので、スイッチ（プルリクエスト）は付けられません。要らなければ撤去します。"
-                        if not pr and not b.ahead else "")
                      + (f"{b.idle_days} 日間はんだ付けされていません。" if rusty else "")
                      + (f"付箋 #{issue.number} が差し込まれています。" if issue else "")
                      + (f"作業台には、まだ GitHub に送っていないはんだ点が {lb.unpushed} つあります（点線）。" if lb and lb.unpushed else "")
