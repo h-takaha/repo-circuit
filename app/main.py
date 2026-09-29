@@ -245,6 +245,15 @@ def create_app(settings: Settings | None = None, source=None) -> FastAPI:
     async def action_check(request: Request):
         return await _action(request, run=False)
 
+    @app.post("/actions/command")
+    async def action_command(request: Request):
+        check_csrf(request.headers.get("X-CSRF-Token"))
+        data = await request.json()
+        try:
+            return {"cmd": await actions.command(data.get("action", ""), data.get("params") or {})}
+        except ActionError as e:
+            return JSONResponse({"cmd": "", "message": str(e)}, status_code=400)
+
     @app.post("/actions/run")
     async def action_run(request: Request):
         return await _action(request, run=True)

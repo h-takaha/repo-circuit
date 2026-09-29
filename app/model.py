@@ -102,6 +102,7 @@ class LocalState:
     """作業台（開発 repo）と本番（稼働クローン）の位置。読み取り専用で集める。"""
 
     dev_exists: bool = False
+    dev_dir: str = ""  # 作業台のパス（「ターミナルから実行」のコマンドが git -C で指す）
     dev_head: str = ""
     dev_unpushed: int = 0  # 今いる分岐の未 push 数
     dev_branch: str = ""  # 今いる分岐（detached なら空）

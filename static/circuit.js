@@ -34,6 +34,26 @@
     return el('details', {}, el('summary', {}, 'コマンドで言うと'), el('code', { class: 'cmd' }, cmd));
   }
 
+  // 「ターミナルから実行」: コマンドをコピーするだけ。アプリは実行しない（作業台にも GitHub にも触れない）
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* 下の方法で試す */ }
+    try {
+      const t = document.createElement('textarea');
+      t.value = text; t.style.position = 'fixed'; t.style.opacity = '0';
+      document.body.append(t); t.select();
+      const ok = document.execCommand('copy');
+      t.remove();
+      return ok;
+    } catch (e) { return false; }
+  }
+
+  async function copyAndReport(cmd) {
+    const ok = !!cmd && await copyText(cmd);
+    show(current, ok
+      ? { ok: true, text: 'コマンドをコピーしました。自分のターミナルに貼り付けて実行してください。' }
+      : { ok: false, text: 'コピーできませんでした。「コマンドで言うと」を開いて、文字を選んでコピーしてください。' });
+  }
+
   // 'ok'（正常）/ 'warn'（注意: 確認すれば進める）/ 'trip'（トリップ: 止める）
   function setBreaker(state) {
     breaker.classList.toggle('trip', state === 'trip');
@@ -52,10 +72,14 @@
     highlight(partId);
     setBreaker('ok');
     document.querySelectorAll('.tripping').forEach((n) => n.classList.remove('tripping'));
-    // ボタンごとに「コマンドで言うと」を添える（押す前に、裏で走るコマンドが読める）
+    // 操作ごとに「ツールから実行」「ターミナルから実行」と、裏で走るコマンド（「コマンドで言うと」）を添える。
+    // 作業台の操作（terminal）は、アプリが作業台に書き込まないので「ターミナルから実行」だけ。
     const acts = el('div', { class: 'acts' }, (p.actions || []).map((a) =>
       el('div', { class: 'act' },
-        el('button', { type: 'button', class: 'btn' + (a.danger ? ' danger' : ''), onclick: () => prepare(a) }, a.label),
+        el('div', { class: 'act-label' }, a.label),
+        el('div', { class: 'act-btns' },
+          a.terminal ? null : el('button', { type: 'button', class: 'btn' + (a.danger ? ' danger' : ''), onclick: () => prepare(a, 'tool') }, 'ツールから実行'),
+          el('button', { type: 'button', class: 'btn ghost', onclick: () => (a.terminal ? copyAndReport(a.cmd) : prepare(a, 'terminal')) }, 'ターミナルから実行')),
         cmdBlock(a.cmd))));
     setPanel(
       flash ? el('div', { class: 'flash ' + (flash.ok ? 'ok' : 'ng') }, flash.text) : null,
@@ -69,8 +93,8 @@
   }
 
   // 入力が要る操作は、先に入力欄を出す
-  function prepare(a) {
-    if (!a.fields || !a.fields.length) return check(a, a.params);
+  function prepare(a, mode) {
+    if (!a.fields || !a.fields.length) return check(a, a.params, mode);
     const inputs = {};
     const fields = a.fields.map((f) => {
       const id = 'f-' + f.name;
@@ -89,7 +113,7 @@
         el('button', { type: 'button', class: 'btn', onclick: () => {
           const params = { ...a.params };
           for (const [k, input] of Object.entries(inputs)) params[k] = input.value;
-          check(a, params);
+          check(a, params, mode);
         } }, '確認へ'),
         el('button', { type: 'button', class: 'btn ghost', onclick: () => show(current) }, 'やめる')),
     );
@@ -106,11 +130,11 @@
     return data;
   }
 
-  async function check(a, params) {
+  async function check(a, params, mode) {
     const res = await post('/actions/check', { action: a.action, params });
     if (res.verdicts === undefined) return showError(res.message || res.detail);
     if (res.tripped) return showTrip(res);
-    showConfirm(a, params, res);
+    showConfirm(a, params, res, mode);
   }
 
   function showError(message) {
@@ -143,16 +167,18 @@
     );
   }
 
-  function showConfirm(a, params, res) {
+  function showConfirm(a, params, res, mode) {
+    const terminal = mode === 'terminal';
+    if (terminal && !res.cmd) return showError('この入力はコマンドに埋め込めないため、コピーできません（ツールから実行してください）。');
     const warns = res.verdicts.filter((v) => v.level === 'warn');
     setBreaker(warns.length ? 'warn' : 'ok');
-    const go = el('button', { type: 'button', class: 'btn', disabled: warns.length > 0 }, '実行する');
+    const go = el('button', { type: 'button', class: 'btn', disabled: warns.length > 0 }, terminal ? 'コマンドをコピー' : '実行する');
     const ack = warns.length ? el('input', { type: 'checkbox', id: 'ack', onchange: (e) => { go.disabled = !e.target.checked; } }) : null;
-    go.addEventListener('click', () => run(a, params, !!(ack && ack.checked), go));
+    go.addEventListener('click', () => (terminal ? copyAndReport(res.cmd) : run(a, params, !!(ack && ack.checked), go)));
     setPanel(
       el('div', { class: 'kicker' }, '操作の確認'),
       el('h2', {}, res.label),
-      el('div', { style: 'font-size:14px;font-weight:700' }, 'この操作で起きること'),
+      el('div', { style: 'font-size:14px;font-weight:700' }, terminal ? 'ターミナルで実行すると起きること' : 'この操作で起きること'),
       el('ul', {}, res.preview.map((t) => el('li', {}, t))),
       ...warns.map((v) => el('div', { class: 'guard warn' },
         el('div', { class: 'gt' }, '▲ 注意 — ' + v.rule),

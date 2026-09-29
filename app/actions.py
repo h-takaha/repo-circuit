@@ -100,6 +100,17 @@ class Actions:
             raise ActionError(f"{repo} という回路（repo）は見つかりません")
         return await self.service.view(repo)
 
+    async def command(self, action: str, params: dict) -> str:
+        """入力の途中でも、いま入力されている内容で走るコマンドを返す（判定も記録もしない。表示専用）。"""
+        if action not in ACTIONS:
+            raise ActionError(f"未対応の操作です: {action}")
+        p = {k: (v.strip() if isinstance(v, str) else v) for k, v in params.items()}
+        view = await self._view(str(p.get("repo") or ""))
+        try:
+            return command(action, p, view.default_branch, view.local.dev_dir)
+        except KeyError:
+            return ""
+
     async def check(self, action: str, params: dict) -> dict:
         p = normalize(action, params)
         view = await self._view(p["repo"])
@@ -110,7 +121,7 @@ class Actions:
             "action": action,
             "label": ACTIONS[action],
             "preview": lines,
-            "cmd": command(action, p, view.default_branch),
+            "cmd": command(action, p, view.default_branch, view.local.dev_dir),
             "verdicts": [v.to_dict() for v in verdicts],
             "tripped": any(v.level == TRIP for v in verdicts),
             "needs_ack": any(v.level == WARN for v in verdicts),

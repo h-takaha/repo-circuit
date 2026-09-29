@@ -50,8 +50,8 @@ def read_local_state(
     渡されなかった分岐は手元の origin/* を使う。
 
     detail=False（配電盤）は分岐ごとに読まず、未送電の合計を git 1回で数える。repo が多いと分岐ごとの読み取りが遅いため。"""
-    st = LocalState()
     dev = lab_git / repo
+    st = LocalState(dev_dir=str(dev))
     if (dev / ".git").exists():
         st.dev_exists = True
         st.dev_head = _git(dev, "rev-parse", "HEAD") or ""
