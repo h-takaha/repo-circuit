@@ -111,3 +111,11 @@ def test_reading_does_not_write_the_index(lab):
     before = index.stat().st_mtime_ns
     read_local_state(root / "git", root / "run", "tool", remote_heads=heads, default_branch="main")
     assert index.stat().st_mtime_ns == before
+
+
+def test_branch_missing_from_github_list_falls_back_to_origin_ref(lab):
+    root, heads = lab
+    # GitHub から渡る分岐の一覧は上限で切られることがある。feat が漏れても origin/feat があれば push 済みと分かる
+    st = read_local_state(root / "git", root / "run", "tool", remote_heads={"main": heads["main"]}, default_branch="main")
+    feat = next(b for b in st.branches if b.name == "feat")
+    assert feat.on_github and feat.unpushed == 1

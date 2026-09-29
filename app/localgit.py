@@ -46,14 +46,15 @@ def read_local_state(
     default_branch: str = "main",
 ) -> LocalState:
     """remote_heads は GitHub 上の分岐名→先端 sha。fetch しないローカルの origin/* より新しいので、送電済みの基準にする。
-    None のときは手元の origin/* を使う。"""
+    渡されなかった分岐は手元の origin/* を使う。"""
     st = LocalState()
     dev = lab_git / repo
     if (dev / ".git").exists():
         st.dev_exists = True
         st.dev_head = _git(dev, "rev-parse", "HEAD") or ""
         st.dev_branch, st.dev_uncommitted = _worktree(dev)
-        heads = remote_heads if remote_heads is not None else _origin_heads(dev)
+        # GitHub から受け取るのは表示する分岐（最大 8 本）だけなので、足りない分は手元の origin/* で補う
+        heads = {**_origin_heads(dev), **(remote_heads or {})}
         for b in _local_branches(dev, heads, default_branch, st.dev_branch):
             if b.name == st.dev_branch:
                 st.dev_unpushed = b.unpushed
