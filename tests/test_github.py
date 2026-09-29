@@ -19,7 +19,8 @@ def _pr(n, head, sha, body=""):
             "state": "open", "merged_at": None, "draft": False, "mergeable_state": "clean", "html_url": ""}
 
 
-def _mock_agent_ops(check_status=403, detail_status=200, router=respx):
+def _mock_agent_ops(check_status=403, detail_status=200, router=respx, runs=None, workflows=1):
+    """runs=None なら Actions API も 403（権限なし）。リストを渡すとその実行結果を返す。"""
     api = "https://api.github.com/repos/h-takaha/agent-ops"
     c = {"sha": "m1", "commit": {"message": "main", "committer": {"date": "2026-09-01T00:00:00Z"}}}
     pr = _pr(2, "fix/1-x", "b1", "Fixes #1")
@@ -39,6 +40,11 @@ def _mock_agent_ops(check_status=403, detail_status=200, router=respx):
     router.get(f"{api}/pulls/2").respond(detail_status, json=pr if detail_status == 200 else {"message": "Forbidden"})
     checks = router.get(f"{api}/commits/b1/check-runs").respond(
         check_status, json={"check_runs": []} if check_status == 200 else {"message": "Forbidden"})
+    if runs is None:
+        router.get(f"{api}/actions/runs").respond(403, json={"message": "Forbidden"})
+    else:
+        router.get(f"{api}/actions/runs", params={"head_sha": "b1"}).respond(200, json={"workflow_runs": runs})
+        router.get(f"{api}/actions/workflows").respond(200, json={"total_count": workflows})
     return api, checks
 
 
@@ -98,6 +104,29 @@ def test_other_github_errors_are_not_hidden(check_status, detail_status):
         with pytest.raises(GitHubError) as caught:
             asyncio.run(src.repo_view("agent-ops"))
     assert caught.value.status == (detail_status if detail_status != 200 else check_status)
+
+
+def _run(n, status, conclusion, workflow=1, attempt=1):
+    return {"workflow_id": workflow, "run_number": n, "run_attempt": attempt, "status": status, "conclusion": conclusion}
+
+
+@pytest.mark.parametrize("runs, workflows, expected", [
+    ([_run(1, "completed", "success")], 1, "success"),
+    ([_run(1, "completed", "failure")], 1, "failure"),
+    ([_run(1, "in_progress", None)], 1, "pending"),
+    # やり直して通ったら、前の失敗は数えない
+    ([_run(1, "completed", "failure"), _run(1, "completed", "success", attempt=2)], 1, "success"),
+    ([_run(3, "completed", "success"), _run(2, "completed", "failure")], 1, "success"),
+    # 別のワークフローが失敗していれば失敗
+    ([_run(1, "completed", "success"), _run(1, "completed", "failure", workflow=2)], 2, "failure"),
+    ([], 0, "none"),  # ワークフローが1つも無い repo は検査なし
+    ([], 1, "unavailable"),  # ワークフローはあるのに実行が無い（まだ作られていないかも）→ 取得不可のまま
+])
+def test_checks_403_falls_back_to_actions_runs(runs, workflows, expected):
+    with respx.mock(assert_all_called=False) as router:
+        _mock_agent_ops(router=router, runs=runs, workflows=workflows)
+        src = GitHubSource("t", "h-takaha")
+        assert asyncio.run(src.repo_view("agent-ops")).pulls[0].ci == expected
 
 
 @respx.mock

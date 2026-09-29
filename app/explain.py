@@ -249,7 +249,7 @@ def parts(view: RepoView) -> dict[str, dict]:
                      "failure": "自動テストが失敗しています。GitHub で失敗ログを読み、分岐に修正をはんだ付けすると、ランプは自動で再検査されます。",
                      "pending": "自動テストの実行中です。終わるまでスイッチは閉じられません。",
                      "none": "この回路には自動テストが設定されていません。",
-                     "unavailable": "GitHub の検査結果を取得できません（Checks API が 403）。検査なしとは異なります。取得不可の間はブレーカーがアプリからの合流を止めます。"}.get(pr.ci, ""),
+                     "unavailable": "GitHub の検査結果を取得できません（Checks API が 403 で、Actions の実行結果からも判定できない）。検査なしとは異なります。取得不可の間はブレーカーがアプリからの合流を止めます。"}.get(pr.ci, ""),
             "cmd": f"gh pr checks {pr.number}",
             "url": pr.url + "/checks" if pr.url else "",
             "actions": led_acts,

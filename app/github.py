@@ -47,6 +47,18 @@ def _ci_state(check_runs: list[dict]) -> str:
     return "success"
 
 
+def _actions_state(runs: list[dict]) -> str:
+    """ワークフローごとに最新の実行だけを見る（やり直し前の失敗を数えない）。"""
+    latest: dict = {}
+    for run in runs:
+        key = run.get("workflow_id") or run.get("name")
+        if key not in latest or run.get("run_number", 0) > latest[key].get("run_number", 0) or (
+            run.get("run_number") == latest[key].get("run_number") and run.get("run_attempt", 1) > latest[key].get("run_attempt", 1)
+        ):
+            latest[key] = run
+    return _ci_state(list(latest.values()))
+
+
 class GitHubSource:
     def __init__(self, token: str, owner: str, ttl: float = 60, transport: httpx.AsyncBaseTransport | None = None):
         self.owner = owner
@@ -164,10 +176,29 @@ class GitHubSource:
         except GitHubError as e:
             if e.status != 403:
                 raise
-            ci = "unavailable"
+            # Fine-grained PAT は Checks API を読めない。Actions の実行結果で代わりに判定する
+            ci = await self._actions_ci(r, detail["head"]["sha"])
         else:
             ci = _ci_state(checks.get("check_runs", []))
         return self._pull_basic(detail, ci, detail.get("mergeable_state") or "unknown")
+
+    async def _actions_ci(self, r: str, sha: str) -> str:
+        """Checks API の代わりに GitHub Actions の実行結果から検査ランプを決める。Actions 以外の外部 CI は見えない。
+
+        - 実行がある → その結果（合格 / 失敗 / 検査中）
+        - ワークフローが1つも無い → 検査なし
+        - ワークフローはあるのに、この sha の実行が無い（まだ作られていないかもしれない）→ 取得不可のまま
+        """
+        try:
+            runs = (await self._get(f"{r}/actions/runs", head_sha=sha, per_page=50)).get("workflow_runs", [])
+            if runs:
+                return _actions_state(runs)
+            workflows = await self._get(f"{r}/actions/workflows", per_page=1)
+        except GitHubError as e:
+            if e.status in (403, 404):
+                return "unavailable"
+            raise
+        return "none" if not workflows.get("total_count") else "unavailable"
 
     @staticmethod
     def _pull_basic(p: dict, ci: str, mergeable_state: str) -> PullRequest:

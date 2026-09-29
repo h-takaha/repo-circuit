@@ -44,15 +44,22 @@ def read_local_state(
     ignore_dirty: list[str] | None = None,
     remote_heads: dict[str, str] | None = None,
     default_branch: str = "main",
+    detail: bool = True,
 ) -> LocalState:
     """remote_heads は GitHub 上の分岐名→先端 sha。fetch しないローカルの origin/* より新しいので、送電済みの基準にする。
-    渡されなかった分岐は手元の origin/* を使う。"""
+    渡されなかった分岐は手元の origin/* を使う。
+
+    detail=False（配電盤）は分岐ごとに読まず、未送電の合計を git 1回で数える。repo が多いと分岐ごとの読み取りが遅いため。"""
     st = LocalState()
     dev = lab_git / repo
     if (dev / ".git").exists():
         st.dev_exists = True
         st.dev_head = _git(dev, "rev-parse", "HEAD") or ""
         st.dev_branch, st.dev_uncommitted = _worktree(dev)
+        if not detail:
+            count = _git(dev, "rev-list", "--count", "--branches", "--not", "--remotes")
+            st.unpushed_total = int(count) if count and count.isdigit() else 0
+            return _read_run(st, lab_run / repo, ignore_dirty)
         # GitHub から受け取るのは表示する分岐（最大 8 本）だけなので、足りない分は手元の origin/* で補う
         heads = {**_origin_heads(dev), **(remote_heads or {})}
         for b in _local_branches(dev, heads, default_branch, st.dev_branch):
@@ -60,7 +67,10 @@ def read_local_state(
                 st.dev_unpushed = b.unpushed
             if b.name != default_branch:
                 st.branches.append(b)
-    run = lab_run / repo
+    return _read_run(st, lab_run / repo, ignore_dirty)
+
+
+def _read_run(st: LocalState, run: Path, ignore_dirty: list[str] | None) -> LocalState:
     if (run / ".git").exists():
         st.run_exists = True
         st.run_head = _git(run, "rev-parse", "HEAD") or ""
