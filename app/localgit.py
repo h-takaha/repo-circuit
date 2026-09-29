@@ -47,11 +47,16 @@ def read_local_state(
     default_branch: str = "main",
     detail: bool = True,
     github_names: set[str] | None = None,
+    github_main: set[str] | None = None,
 ) -> LocalState:
     """remote_heads は GitHub 上の分岐名→先端 sha。fetch しないローカルの origin/* より新しいので、送電済みの基準にする。
     渡されなかった分岐は手元の origin/* を使う。
 
-    detail=False（配電盤）は分岐ごとに読まず、未送電の合計を git 1回で数える。repo が多いと分岐ごとの読み取りが遅いため。"""
+    detail=False（配電盤）は分岐ごとに読まず、未送電の合計を git 1回で数える。repo が多いと分岐ごとの読み取りが遅いため。
+
+    github_main は GitHub の幹線の直近のコミットの sha。作業台の origin/* は fetch していないと古いので、
+    「どの origin/* にも無い」コミットでも、GitHub の幹線にすでにあれば送電済みとして未送電から引く。"""
+    known = frozenset(github_main or ())
     dev = lab_git / repo
     st = LocalState(dev_dir=str(dev))
     if (dev / ".git").exists():
@@ -60,13 +65,12 @@ def read_local_state(
         st.dev_head = _git(dev, "rev-parse", "HEAD") or ""
         st.dev_branch, st.dev_uncommitted = _worktree(dev)
         if not detail:
-            count = _git(dev, "rev-list", "--count", "--branches", "--not", "--remotes")
-            st.unpushed_total = int(count) if count and count.isdigit() else 0
+            st.unpushed_total = _unpushed_total(dev, known)
             return _read_run(st, lab_run / repo, ignore_dirty)
         # GitHub から受け取るのは表示する分岐（最大 8 本）だけなので、足りない分は手元の origin/* で補う
         origin = _origin_heads(dev)
         heads = {**origin, **(remote_heads or {})}
-        for b in _local_branches(dev, heads, default_branch, st.dev_branch):
+        for b in _local_branches(dev, heads, default_branch, st.dev_branch, known):
             if b.name == st.dev_branch:
                 st.dev_unpushed = b.unpushed
             if b.name != default_branch:
@@ -109,7 +113,7 @@ def _origin_heads(dev: Path) -> dict[str, str]:
     return dict(line.split("\0", 1) for line in out.splitlines() if "\0" in line and not line.startswith("HEAD\0"))
 
 
-def _local_branches(dev: Path, heads: dict[str, str], default: str, current: str) -> list[LocalBranch]:
+def _local_branches(dev: Path, heads: dict[str, str], default: str, current: str, known: frozenset[str] = frozenset()) -> list[LocalBranch]:
     fmt = "--format=%(refname:short)%00%(objectname)"
     base = f"origin/{default}"
     # 幹線に入りきった分岐は工程が終わっているので読まない（今いる分岐と既定分岐は必ず読む）
@@ -126,7 +130,20 @@ def _local_branches(dev: Path, heads: dict[str, str], default: str, current: str
                 all_refs[must] = sha
         if must in all_refs and must not in names:
             names.append(must)
-    return [_local_branch(dev, n, all_refs[n], heads.get(n), base) for n in names]
+    return [_local_branch(dev, n, all_refs[n], heads.get(n), base, known) for n in names]
+
+
+MAX_UNPUSHED_LIST = 2000
+
+
+def _unpushed_total(dev: Path, known: frozenset[str]) -> int:
+    """どの origin/* にも無いはんだ点の合計から、GitHub の幹線にすでにあるものを引く（配電盤用の軽い読み取り）。"""
+    if known:
+        shas = (_git(dev, "rev-list", "--branches", "--not", "--remotes", f"--max-count={MAX_UNPUSHED_LIST}") or "").split()
+        if len(shas) < MAX_UNPUSHED_LIST:
+            return len([s for s in shas if s not in known])
+    count = _git(dev, "rev-list", "--count", "--branches", "--not", "--remotes")
+    return int(count) if count and count.isdigit() else 0
 
 
 def _busy_branches(dev: Path) -> set[str]:
@@ -151,7 +168,7 @@ def _merged_leftovers(dev: Path, default: str, current: str, heads: dict[str, st
             for n, h, d in rows if n not in skip][:MAX_MERGED_READ]
 
 
-def _local_branch(dev: Path, name: str, head: str, remote: str | None, base: str) -> LocalBranch:
+def _local_branch(dev: Path, name: str, head: str, remote: str | None, base: str, known: frozenset[str] = frozenset()) -> LocalBranch:
     b = LocalBranch(name=name, head=head, on_github=remote is not None)
     if remote == head:
         return b
@@ -174,7 +191,9 @@ def _local_branch(dev: Path, name: str, head: str, remote: str | None, base: str
     if log is None:
         return b
     rows = [line.split("\0") for line in log.splitlines() if line.count("\0") == 2]
-    if not counted:
+    if known:  # GitHub の幹線にすでにあるコミットは送電済み（origin/* の写しが古いだけ）
+        rows = [r for r in rows if r[0] not in known]
+    if known or not counted:  # counted の数は origin/* との比較なので、引いたら数え直す
         b.unpushed = len(rows)
     b.commits = [Commit(sha=h, message=m, date=_date(d)) for h, m, d in reversed(rows[:MAX_UNPUSHED_DOTS])]
     if b.commits:

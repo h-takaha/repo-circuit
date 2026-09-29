@@ -186,3 +186,60 @@ def test_reads_where_the_github_copy_of_the_default_branch_points(lab):
         assert st.origin_main == heads["main"]
     st = read_local_state(root / "git", root / "run", "tool", default_branch="nope")
     assert st.origin_main == ""
+
+
+def _shas(lab):
+    root, heads = lab
+    dev = root / "git" / "tool"
+    lo = git(dev, "rev-list", "main..local-only").split()  # 新しい順。lo[-1] が古い方
+    feat_new = git(dev, "rev-list", f"{heads['feat']}..feat").split()
+    return root, heads, lo, feat_new
+
+
+def test_commits_already_in_github_main_are_not_unpushed(lab):
+    """作業台の origin/* が古くても、GitHub の幹線にすでにあるコミットは送電済み。"""
+    root, heads, lo, feat_new = _shas(lab)
+    read = lambda main: read_local_state(root / "git", root / "run", "tool", remote_heads=heads, default_branch="main", github_main=main)
+    by = lambda st: {b.name: b for b in st.branches}
+
+    st = read(None)  # 従来どおり
+    assert by(st)["local-only"].unpushed == 2 and by(st)["feat"].unpushed == 1 and st.dev_unpushed == 1
+
+    st = read(set(lo) | set(feat_new))  # 全部が GitHub の幹線にある
+    assert by(st)["local-only"].unpushed == 0 and by(st)["local-only"].commits == []
+    assert by(st)["feat"].unpushed == 0 and st.dev_unpushed == 0  # origin/feat との比較で数えた分も引く
+
+    st = read({lo[-1]})  # 古い方の1つだけが幹線にある
+    lo_b = by(st)["local-only"]
+    assert lo_b.unpushed == 1 and [c.headline for c in lo_b.commits] == ["c.txt: 日本語の見出し"]
+
+    st = read({"f" * 40})  # 無関係な sha は何も引かない
+    assert by(st)["local-only"].unpushed == 2 and by(st)["feat"].unpushed == 1
+
+
+def test_dashboard_total_also_subtracts_commits_in_github_main(lab, monkeypatch):
+    import app.localgit as lg
+
+    root, heads, lo, feat_new = _shas(lab)
+    total = lambda main: read_local_state(root / "git", root / "run", "tool", remote_heads=heads, default_branch="main",
+                                          detail=False, github_main=main).unpushed_total
+    assert total(None) == 3
+    assert total(set(lo)) == 1
+    assert total(set(lo) | set(feat_new)) == 0
+    monkeypatch.setattr(lg, "MAX_UNPUSHED_LIST", 1)  # 一覧が上限に達したら、引かずに従来の数え方（--count）に戻る
+    assert total(set(lo)) == 3
+
+
+def test_a_local_only_branch_whose_commits_are_in_github_main_leaves_the_pipeline(lab):
+    """偽の「未送電・作業台のみ・GitHub へ送る」の行が、工程表から消える。"""
+    from app.model import RepoView
+    from app.pipeline import rows
+
+    root, heads, lo, feat_new = _shas(lab)
+
+    def names(main):
+        st = read_local_state(root / "git", root / "run", "tool", remote_heads=heads, default_branch="main", github_main=main)
+        return [r.get("name") for r in rows(RepoView("tool", "main", [], [], [], [], local=st))]
+
+    assert "local-only" in names(None)
+    assert "local-only" not in names(set(lo))
