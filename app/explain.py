@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .circuit import RUST_DAYS
-from .commands import command
+from .commands import command, default_workdir, delete_local, push_local, switch_local
 from .issues import KINDS, PRIORITIES, board_state, branch_linked_issue, branch_name_for, linked_issue, wire_for
 from .model import RepoView
 from .pipeline import local_totals
@@ -120,6 +120,11 @@ def _act(action: str, label: str, repo: str, danger: bool = False, fields: list[
     return {"action": action, "label": label, "danger": danger, "params": {"repo": repo, **params}, "fields": fields or []}
 
 
+def _term(label: str, cmd: str) -> list[dict]:
+    """作業台の操作。アプリは作業台に書き込まないので、コマンドをコピーして自分のターミナルで実行する（cmd が空なら出さない）。"""
+    return [{"terminal": True, "label": label, "cmd": cmd, "danger": False, "fields": []}] if cmd else []
+
+
 def parts(view: RepoView) -> dict[str, dict]:
     r = view.name
     out: dict[str, dict] = {}
@@ -141,6 +146,7 @@ def parts(view: RepoView) -> dict[str, dict]:
     }
     lag = view.run_behind
     loc = view.local
+    wd = loc.dev_dir or default_workdir(r)
     out["run"] = {
         "title": "本番マーカー「本番はここまで」",
         "term": f"稼働クローン C:\\lab\\run\\{r} の位置",
@@ -168,7 +174,7 @@ def parts(view: RepoView) -> dict[str, dict]:
                 "term": f"コミット {c.short}（作業台だけにある・未 push）",
                 "body": f"{c.date:%Y-%m-%d %H:%M} に作業台で記録した変更。まだ GitHub に送っていないので、GitHub にも本番にもありません。"
                         f"分岐 {lb.name} を push すると GitHub に届きます。",
-                "actions": [],
+                "actions": _term("GitHub に送る（push）", push_local(wd, lb.name, not lb.on_github)),
             }
         if lb.on_github or view.branch(lb.name):
             continue
@@ -180,8 +186,9 @@ def parts(view: RepoView) -> dict[str, dict]:
                      "送るまでは GitHub にも本番にも存在せず、スイッチ（プルリクエスト）も付けられません。"
                      + ("いま作業台で開いている分岐です。" if here else "")
                      + (f"まだコミットしていない変更も {loc.dev_uncommitted} つあります。" if here and loc.dev_uncommitted else "")
-                     + "このアプリは作業台に書き込まないので、送るのはあなたのターミナルから行います。"),
-            "actions": [],
+                     + "このアプリは作業台に書き込まないので、送るのはあなたのターミナルから行います（「ターミナルから実行」でコマンドをコピーできます）。"),
+            "actions": _term("GitHub に送る（push）", push_local(wd, lb.name, True))
+                       + ([] if here else _term("作業台をこの分岐に切り替える", switch_local(wd, lb.name))),
         }
     commits = {c.sha: c for c in view.main_commits}
     for b in view.branches:
@@ -208,6 +215,13 @@ def parts(view: RepoView) -> dict[str, dict]:
                 {"name": "body", "label": "説明（Fixes #番号 で付箋とつながる）", "value": default_body, "multiline": True},
             ]))
         acts.append(_act("delete_branch", "この分岐を撤去する", r, danger=True, name=b.name))
+        if lb:
+            here_now = lb.name == loc.dev_branch
+            if lb.unpushed:
+                acts += _term("GitHub に送る（push）", push_local(wd, lb.name, False))
+            if not here_now:
+                acts += _term("作業台をこの分岐に切り替える", switch_local(wd, lb.name))
+                acts += _term("作業台のこの分岐を消す（未合流なら git が断る）", delete_local(wd, lb.name))
         rusty = not pr and b.idle_days >= RUST_DAYS
         out[f"branch:{b.name}"] = {
             "title": ("錆びた分岐 " if rusty else "分岐 ") + b.name,
@@ -257,8 +271,10 @@ def parts(view: RepoView) -> dict[str, dict]:
 def _attach_commands(part: dict, view: RepoView) -> None:
     """各操作ボタンに「コマンドで言うと」の文字列を付ける。入力欄は既定値で埋めた形（実際の値は確認画面で見える）。"""
     for a in part.get("actions", []):
+        if a.get("terminal"):
+            continue
         defaults = {f["name"]: f["value"] for f in a["fields"]}
-        a["cmd"] = command(a["action"], {**a["params"], **defaults}, view.default_branch)
+        a["cmd"] = command(a["action"], {**a["params"], **defaults}, view.default_branch, view.local.dev_dir)
 
 
 def issue_part(view: RepoView, issue) -> dict:

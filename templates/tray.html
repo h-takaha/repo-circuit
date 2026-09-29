@@ -59,8 +59,12 @@
     <div class="pills">
       {% for k, label in priorities.items() %}<input type="radio" name="priority" id="p-{{ k }}" value="{{ k }}" {{ 'checked' if k == (form.priority or 'p2') }}><label for="p-{{ k }}">{{ label }}</label>{% endfor %}
     </div>
-    <button class="btn" type="submit" style="min-height:48px">付箋を貼る（Issue を作成）</button>
-    <details><summary>コマンドで言うと</summary><code class="cmd" id="issue-cmd">gh issue create -R h-takaha/&lt;ツール&gt; -t "&lt;タイトル&gt;" -l feedback,&lt;種類&gt;,&lt;急ぎ度&gt;</code></details>
+    <div class="act-btns">
+      <button class="btn" type="submit" style="min-height:48px">ツールから実行（付箋を貼る）</button>
+      <button class="btn ghost" type="button" id="issue-copy" style="min-height:48px">ターミナルから実行（コピー）</button>
+    </div>
+    <div id="issue-copy-msg" class="flash" hidden></div>
+    <details><summary>コマンドで言うと</summary><code class="cmd" id="issue-cmd">gh issue create -R h-takaha/&lt;ツール&gt; -t '&lt;タイトル&gt;' -b '&lt;本文&gt;' -l feedback,&lt;種類&gt;,&lt;急ぎ度&gt;</code></details>
     {% if result %}
       {% if result.ok %}
       <div class="flash ok"><b>{{ result.message }}</b>（未接続の列）
