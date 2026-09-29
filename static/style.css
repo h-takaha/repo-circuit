@@ -102,19 +102,20 @@ code.cmd{font-family:'IBM Plex Mono',monospace;font-size:12.5px;background:var(-
 /* 工程表: 分岐ごとに はんだ付け→送電→スイッチ→検査→合流→本番 */
 .pipe{padding:12px 14px;display:flex;flex-direction:column;gap:8px;overflow-x:auto}
 .pipe table{border-collapse:collapse;width:100%;font-size:13px}
-.pipe th{text-align:left;font-weight:700;padding:4px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+.pipe th{text-align:left;font-weight:700;padding:4px;border-bottom:1px solid var(--line);white-space:nowrap}
 .pipe th span{display:block}
-.pipe td{padding:6px;border-bottom:1px solid var(--line);vertical-align:middle}
+.pipe td{padding:6px 4px;border-bottom:1px solid var(--line);vertical-align:middle}
+.pipe td+td{font-size:12px}
 .pipe tr.here td{background:var(--blue-bg)}
 .pipe tr.merged td{color:var(--muted)}
 .pipe .pname{font:inherit;background:none;border:0;padding:0;color:var(--ink);cursor:pointer;display:inline-flex;flex-wrap:wrap;gap:4px 6px;align-items:center;text-align:left;min-height:32px;overflow-wrap:anywhere}
-.pipe td:first-child{width:34%;min-width:180px}
+.pipe td:first-child{width:28%;min-width:150px;padding-right:8px}
 .pipe .pnext{display:block;font-size:12px;color:var(--muted);line-height:1.45}
 .pipe .pnext.pwarn{color:var(--yellow-ink)}
 .pipe .pname:hover .mono{text-decoration:underline}
 .herebadge{font-size:11px;font-weight:700;color:#FFFDF8;background:var(--blue);border-radius:4px;padding:1px 6px;white-space:nowrap}
-.pst{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
-.pst i{width:12px;height:12px;border-radius:50%;flex-shrink:0;border:2px solid var(--rust);background:transparent}
+.pst{display:inline-flex;align-items:flex-start;gap:5px;line-height:1.35;word-break:keep-all}
+.pst i{margin-top:2px;width:12px;height:12px;border-radius:50%;flex-shrink:0;border:2px solid var(--rust);background:transparent}
 .pst.ok i{background:var(--green);border-color:var(--green)}
 .pst.todo i{background:var(--blue);border-color:var(--blue)} .pst.todo{color:var(--blue-ink);font-weight:700}
 .pst.wait i{background:var(--yellow);border-color:var(--yellow)}
@@ -157,7 +158,7 @@ svg .pin{stroke:var(--chip);stroke-width:2px}
 svg .lbl{fill:var(--ink);font-size:13px;font-weight:500}
 svg .lblm{fill:var(--muted);font-size:12px;font-family:'IBM Plex Mono',monospace}
 svg .lblm.runt{fill:var(--copper-d)} svg .lblm.devt{fill:var(--blue-ink);font-weight:600}
-svg .mid{text-anchor:middle}
+svg .mid{text-anchor:middle} svg .end{text-anchor:end}
 svg .led-g{fill:var(--green)} svg .led-r{fill:var(--red)} svg .led-y{fill:var(--yellow)} svg .led-off{fill:var(--rust)}
 svg .halo{opacity:.2}
 svg .blade{stroke:var(--ink);stroke-width:3.5px;stroke-linecap:round;transition:all .3s}

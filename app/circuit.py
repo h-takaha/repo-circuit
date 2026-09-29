@@ -145,8 +145,11 @@ def _branch(s: Scene, view: RepoView, b: Branch, jx: float, y: float, rx: float 
         s.texts.append({"x": start + (30 if hidden > 0 else 0), "y": y - 14, "t": f"作業台のみ · 未送電 {b.ahead}", "cls": "lblm devt"})
     else:
         label = b.name + (f" · {b.idle_days}日放置" if rusty else "") + (f" · 未送電 {lb.unpushed}" if lb and lb.unpushed else "")
+    # スイッチがある分岐は「スイッチ #N」の手前まで、無い分岐は図の右端までに収める
+    room = (pivot - 22 if pr and rx else WIDTH - 10) - (jx + 22)
+    label = _fit(label, room)
     s.texts.append({"x": jx + 22, "y": y + 32, "t": label, "cls": "lblm"})
-    s.hits.append({"x": jx + 22, "y": y + 18, "w": min(8 * len(label) + 10, max(pivot - jx - 30, 60)), "h": 20, "part": part, "label": f"分岐 {b.name}"})
+    s.hits.append({"x": jx + 22, "y": y + 18, "w": max(min(_text_w(label) + 10, room), 60), "h": 20, "part": part, "label": f"分岐 {b.name}"})
 
     if pr and rx:
         cx = pivot + 44
@@ -155,9 +158,10 @@ def _branch(s: Scene, view: RepoView, b: Branch, jx: float, y: float, rx: float 
         s.paths.append({"d": f"M{cx:.0f} {y:.0f}H{rx:.0f}V{s.bus_y}", "cls": wire_cls})
         led_cls = {"success": "led-g", "failure": "led-r", "pending": "led-y"}.get(pr.ci, "led-off")
         s.leds.append({"x": pivot + 22, "y": y - 50, "cls": led_cls})
-        s.texts.append({"x": pivot + 36, "y": y - 46, "t": {"success": "合格", "failure": "失敗", "pending": "検査中", "unavailable": "取得不可"}.get(pr.ci, "検査なし"), "cls": "lbl"})
+        # 文字はランプの左に置く。右に置くと自分の戻り配線や本番ランプの文字に重なる
+        s.texts.append({"x": pivot + 10, "y": y - 46, "t": {"success": "合格", "failure": "失敗", "pending": "検査中", "unavailable": "取得不可"}.get(pr.ci, "検査なし"), "cls": "lbl end"})
         s.texts.append({"x": pivot + 22, "y": y + 32, "t": f"スイッチ #{pr.number}", "cls": "lblm mid"})
-        s.hits.append({"x": pivot + 6, "y": y - 66, "w": 72, "h": 30, "part": f"led:{pr.number}", "label": f"検査ランプ #{pr.number}"})
+        s.hits.append({"x": pivot - 52, "y": y - 66, "w": 90, "h": 30, "part": f"led:{pr.number}", "label": f"検査ランプ #{pr.number}"})
         s.hits.append({"x": pivot - 10, "y": y - 32, "w": 64, "h": 46, "part": f"pr:{pr.number}", "label": f"スイッチ #{pr.number}"})
         if pr.mergeable_state == "dirty":
             sx = pivot + 22
@@ -166,6 +170,20 @@ def _branch(s: Scene, view: RepoView, b: Branch, jx: float, y: float, rx: float 
     else:
         s.paths.append({"d": f"M{pivot - 8:.0f} {y - 8:.0f}L{pivot + 8:.0f} {y + 8:.0f}M{pivot + 8:.0f} {y - 8:.0f}L{pivot - 8:.0f} {y + 8:.0f}", "cls": "w"})
         s.hits.append({"x": pivot - 16, "y": y - 16, "w": 32, "h": 32, "part": part, "label": f"分岐 {b.name} の終端"})
+
+
+def _text_w(t: str) -> float:
+    """12px 等幅ラベルのおおよその幅。全角は英数字の約 1.7 倍。"""
+    return sum(12 if ord(ch) > 0x2000 else 7.3 for ch in t)
+
+
+def _fit(t: str, room: float) -> str:
+    """幅 room に収まらなければ末尾を「…」にする。"""
+    if _text_w(t) <= room:
+        return t
+    while t and _text_w(t + "…") > room:
+        t = t[:-1]
+    return t + "…"
 
 
 def _markers(s: Scene, view: RepoView, main_x: dict[str, float]) -> None:
