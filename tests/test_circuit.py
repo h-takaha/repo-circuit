@@ -118,3 +118,29 @@ def test_ci_text_stays_left_of_its_return_wire_and_lamp_labels():
             sw = next(w for w in s.switches if abs(w["y"] - 46 - t["y"]) < 1)
             assert t["x"] < sw["cx"]  # 右端は自分の戻り配線より左
             assert t["x"] < LAMP_X - _text_w("自動デプロイ") / 2
+
+
+def test_part_panels_have_no_standalone_command():
+    """「コマンドで言うと」はボタンが裏で行うことの翻訳だけ。部品そのものには付けない。"""
+    for name in ("event-calendar", "job-watcher"):
+        for part_id, part in parts(view(name)).items():
+            assert "cmd" not in part, (name, part_id)
+
+
+def _pr_less_branch(v):
+    heads = {p.head for p in v.pulls}
+    return next(b for b in v.branches if b.name not in heads)
+
+
+def test_create_pr_button_is_hidden_when_branch_has_nothing_ahead():
+    v = view()
+    b = _pr_less_branch(v)
+    b.ahead = 1
+    part = parts(v)[f"branch:{b.name}"]
+    assert "create_pr" in [a["action"] for a in part["actions"]]
+    assert "付けられません" not in part["body"]
+
+    b.ahead = 0
+    part = parts(v)[f"branch:{b.name}"]
+    assert [a["action"] for a in part["actions"]] == ["delete_branch"]
+    assert "スイッチ（プルリクエスト）は付けられません" in part["body"]

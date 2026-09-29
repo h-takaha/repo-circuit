@@ -65,7 +65,6 @@
       el('p', {}, p.body),
       p.url ? el('a', { href: p.url, target: '_blank', rel: 'noopener', style: 'font-size:14px' }, 'GitHub で同じものを見る ↗') : null,
       (p.actions || []).length ? acts : el('p', { class: 'cap' }, 'この部品で直接できる操作はありません。'),
-      cmdBlock(p.cmd),
     );
   }
 
