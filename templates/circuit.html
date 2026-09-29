@@ -4,9 +4,10 @@
 <div class="cwrap">
   <aside class="ctray">
     {% if view.local.dev_exists %}
-    <button type="button" class="chipbtn {{ 'unwired' if view.local.merged else 'done' }}" data-part="cleanup">
-      <span class="mono" style="font-size:12px;font-weight:600">作業台の片付け · {{ view.local.merged|length }}本</span>
-      <span style="font-size:14px;font-weight:500;line-height:1.45">{{ '幹線に入りきった手元の分岐が残っています' if view.local.merged else '片付けるものはありません' }}</span>
+    {% set tidy = view.local.merged or view.local.stale_origin %}
+    <button type="button" class="chipbtn {{ 'unwired' if tidy else 'done' }}" data-part="cleanup">
+      <span class="mono" style="font-size:12px;font-weight:600">作業台の片付け · {{ view.local.merged|length }}本{% if view.local.stale_origin %} · 古い記録 {{ view.local.stale_origin|length }}個{% endif %}</span>
+      <span style="font-size:14px;font-weight:500;line-height:1.45">{{ '幹線に入りきった分岐や、GitHub にもう無い古い記録が残っています' if tidy else '片付けるものはありません' }}</span>
     </button>
     {% endif %}
     <div class="kicker">部品トレイ · {{ view.name }} の付箋</div>

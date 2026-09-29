@@ -162,6 +162,21 @@ def test_repo_view_maps_github_responses():
     assert v.pulls[0].ci == "failure"
     assert [i.number for i in v.issues] == [1]  # PR は付箋に混ぜない
     assert v.issues[0].kind == "bug"
+    assert v.github_names == ["main", "fix/1-x"]  # 古い origin/… の判定に使う。詳細を読む8本の上限とは別に、名前は全部持つ
+
+
+@respx.mock
+def test_github_names_are_unknown_when_the_branch_list_may_be_truncated():
+    """/branches は100本まで。100本に達したら全部とは限らないので、None（分からない）にする。"""
+    c = {"sha": "m1", "commit": {"message": "first", "committer": {"date": "2026-09-01T00:00:00Z"}}}
+    respx.get(API).mock(return_value=httpx.Response(200, json={"default_branch": "main", "html_url": "u"}))
+    respx.get(f"{API}/commits").mock(return_value=httpx.Response(200, json=[c]))
+    respx.get(f"{API}/branches").mock(return_value=httpx.Response(200, json=[{"name": "main"}] + [{"name": f"b{i}"} for i in range(99)]))
+    respx.get(f"{API}/pulls").mock(return_value=httpx.Response(200, json=[]))
+    respx.get(f"{API}/issues").mock(return_value=httpx.Response(200, json=[]))
+    respx.get(url__regex=rf"{API}/compare/.*").mock(return_value=httpx.Response(200, json={"ahead_by": 0, "behind_by": 0, "merge_base_commit": c, "commits": []}))
+    v = asyncio.run(GitHubSource("t", "h-takaha").repo_view("tool"))
+    assert v.github_names is None
 
 
 @respx.mock

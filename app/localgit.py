@@ -46,6 +46,7 @@ def read_local_state(
     remote_heads: dict[str, str] | None = None,
     default_branch: str = "main",
     detail: bool = True,
+    github_names: set[str] | None = None,
 ) -> LocalState:
     """remote_heads は GitHub 上の分岐名→先端 sha。fetch しないローカルの origin/* より新しいので、送電済みの基準にする。
     渡されなかった分岐は手元の origin/* を使う。
@@ -62,13 +63,16 @@ def read_local_state(
             st.unpushed_total = int(count) if count and count.isdigit() else 0
             return _read_run(st, lab_run / repo, ignore_dirty)
         # GitHub から受け取るのは表示する分岐（最大 8 本）だけなので、足りない分は手元の origin/* で補う
-        heads = {**_origin_heads(dev), **(remote_heads or {})}
+        origin = _origin_heads(dev)
+        heads = {**origin, **(remote_heads or {})}
         for b in _local_branches(dev, heads, default_branch, st.dev_branch):
             if b.name == st.dev_branch:
                 st.dev_unpushed = b.unpushed
             if b.name != default_branch:
                 st.branches.append(b)
         st.merged = _merged_leftovers(dev, default_branch, st.dev_branch, heads)
+        if github_names is not None:  # GitHub の分岐名の全部が分かるときだけ。分からないのに「古い」とは言わない
+            st.stale_origin = sorted(n for n in origin if n not in github_names)
     return _read_run(st, lab_run / repo, ignore_dirty)
 
 

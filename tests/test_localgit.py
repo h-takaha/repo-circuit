@@ -168,3 +168,12 @@ def test_cleanup_reading_changes_nothing(lab):
     before = (git(dev, "for-each-ref", "refs"), git(dev, "worktree", "list"), git(dev, "rev-parse", "HEAD"))
     read_local_state(root / "git", root / "run", "tool", remote_heads=heads, default_branch="main")
     assert before == (git(dev, "for-each-ref", "refs"), git(dev, "worktree", "list"), git(dev, "rev-parse", "HEAD"))
+
+
+def test_stale_origin_refs_are_those_github_no_longer_has(lab):
+    root, heads = lab
+    read = lambda names: read_local_state(root / "git", root / "run", "tool", remote_heads=heads, default_branch="main", github_names=names).stale_origin
+    assert read({"main"}) == ["feat"]  # 手元の origin/feat は、GitHub にもう無い
+    assert read({"main", "feat"}) == []
+    assert read(set()) == ["feat", "main"] and "HEAD" not in read(set())
+    assert read(None) == []  # GitHub の分岐名の全部が分からないときは、古いとは言わない
