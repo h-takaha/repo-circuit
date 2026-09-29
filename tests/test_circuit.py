@@ -89,3 +89,32 @@ def test_rusty_branch_label():
     v.branches[0].last_date = now() - timedelta(days=40)
     s = layout(v)
     assert any("日放置" in t["t"] for t in s.texts)
+
+
+def test_long_branch_name_does_not_run_into_switch_label():
+    from app.circuit import _text_w
+
+    v = view()
+    long = "fix/12-button-size-with-a-very-long-descriptive-name-20260928"
+    v.branches[2].name = long
+    v.pulls[0].head = long
+    v.local.branches = [b for b in v.local.branches if b.name != "fix/12-button-size"]
+    s = layout(v)
+    label = next(t for t in s.texts if t["t"].startswith("fix/12-button-size"))
+    switch = next(t for t in s.texts if t["t"] == "スイッチ #5")
+    assert label["t"].endswith("…")
+    assert label["x"] + _text_w(label["t"]) <= switch["x"] - _text_w("スイッチ #5") / 2
+    hit = next(h for h in s.hits if h["part"] == f"branch:{long}" and h["h"] == 20)
+    assert hit["label"] == f"分岐 {long}"  # 全体の名前はマウスを載せると見える
+
+
+def test_ci_text_stays_left_of_its_return_wire_and_lamp_labels():
+    from app.circuit import LAMP_X, _text_w
+
+    s = layout(view())
+    for t in s.texts:
+        if t["t"] in ("合格", "失敗", "検査中", "検査なし", "取得不可"):
+            assert "end" in t["cls"]
+            sw = next(w for w in s.switches if abs(w["y"] - 46 - t["y"]) < 1)
+            assert t["x"] < sw["cx"]  # 右端は自分の戻り配線より左
+            assert t["x"] < LAMP_X - _text_w("自動デプロイ") / 2
