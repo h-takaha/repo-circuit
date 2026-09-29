@@ -43,6 +43,11 @@ def delete_local(workdir: str, name: str) -> str:
     return _git(workdir, "branch", "-d", name) if safe_ref(name) else ""
 
 
+def fetch_origin(workdir: str) -> str:
+    """作業台にある GitHub のコピー（origin/…）を最新にする。作業台のファイルや分岐は変わらない。"""
+    return _git(workdir, "fetch", "origin")
+
+
 def prune_origin(workdir: str) -> str:
     """GitHub にはもう無い分岐の、手元の古い記録（origin/…）だけを消す。fetch はしない。"""
     return _git(workdir, "remote", "prune", "origin")

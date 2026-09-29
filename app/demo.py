@@ -103,6 +103,7 @@ def build_demo() -> dict[str, RepoView]:
             MergedBranch("fix/11-typo", main[-2].sha, main[-2].date, on_github=True),
         ],
         stale_origin=["fix/2-old-label"],
+        origin_stale=True, origin_behind=2,
     )
     views[r].pulls = [
         _pr(r, 5, "追加ボタンを押しやすくする", "fix/12-button-size", b[2].sha, "success", 12),

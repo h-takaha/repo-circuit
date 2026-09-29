@@ -56,6 +56,7 @@ def read_local_state(
     st = LocalState(dev_dir=str(dev))
     if (dev / ".git").exists():
         st.dev_exists = True
+        st.origin_main = _git(dev, "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{default_branch}") or ""
         st.dev_head = _git(dev, "rev-parse", "HEAD") or ""
         st.dev_branch, st.dev_uncommitted = _worktree(dev)
         if not detail:

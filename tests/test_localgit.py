@@ -177,3 +177,12 @@ def test_stale_origin_refs_are_those_github_no_longer_has(lab):
     assert read({"main", "feat"}) == []
     assert read(set()) == ["feat", "main"] and "HEAD" not in read(set())
     assert read(None) == []  # GitHub の分岐名の全部が分からないときは、古いとは言わない
+
+
+def test_reads_where_the_github_copy_of_the_default_branch_points(lab):
+    root, heads = lab
+    for detail in (True, False):  # 配電盤（軽い読み取り）でも、回路図でも読む
+        st = read_local_state(root / "git", root / "run", "tool", remote_heads=heads, default_branch="main", detail=detail)
+        assert st.origin_main == heads["main"]
+    st = read_local_state(root / "git", root / "run", "tool", default_branch="nope")
+    assert st.origin_main == ""

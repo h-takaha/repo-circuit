@@ -9,6 +9,17 @@ from .localgit import load_autodeploy, read_local_state
 from .model import RepoView
 
 
+def mark_origin_lag(v: RepoView) -> None:
+    """作業台の origin/<既定分岐>（GitHub のコピー）が GitHub の幹線より古いかを印す。
+    このアプリは fetch しないので、古いままだと「未送電」が実際より多く出る。"""
+    loc = v.local
+    if not (loc.dev_exists and loc.origin_main and v.head_sha) or loc.origin_main == v.head_sha:
+        return
+    loc.origin_stale = True
+    shas = [c.sha for c in v.main_commits]  # 古い順
+    loc.origin_behind = len(shas) - 1 - shas.index(loc.origin_main) if loc.origin_main in shas else None
+
+
 class Service:
     def __init__(self, settings: Settings, source) -> None:
         self.settings = settings
@@ -31,6 +42,7 @@ class Service:
             read_local_state, self.settings.lab_git_dir, self.settings.lab_run_dir, name, ignore, heads, v.default_branch, detail,
             set(v.github_names) if v.github_names is not None else None,
         )
+        mark_origin_lag(v)
         return v
 
     async def views(self) -> list[RepoView]:

@@ -125,6 +125,8 @@ def test_tray_shows_the_issue_command_before_submitting(client):
 def test_cleanup_part_lists_merged_leftovers_with_terminal_delete_buttons():
     v = asyncio.run(DemoSource().repo_view("event-calendar"))
     v.local.dev_dir = WD
+    v.local.origin_stale = False
+    v.local.stale_origin = ["fix/2-old-label"]
     p = parts(v)["cleanup"]
     assert p["title"] == "作業台の片付け" and "2 本" in p["body"]
     labels = [a["label"] for a in p["actions"]]
@@ -137,6 +139,7 @@ def test_cleanup_part_lists_merged_leftovers_with_terminal_delete_buttons():
 def test_cleanup_part_caps_the_list_and_handles_empty_and_no_workbench():
     v = asyncio.run(DemoSource().repo_view("event-calendar"))
     base = v.local.merged[0]
+    v.local.origin_stale = False
     v.local.merged = [MergedBranch(f"old/{i}", base.head, now(), fresh=(i == 0)) for i in range(12)]
     v.local.stale_origin = []
     p = parts(v)["cleanup"]
@@ -157,6 +160,7 @@ def test_circuit_page_has_the_cleanup_chip(client):
 def test_cleanup_part_offers_one_prune_button_for_stale_origin_refs():
     v = asyncio.run(DemoSource().repo_view("event-calendar"))
     v.local.dev_dir = WD
+    v.local.origin_stale = False
     v.local.merged = []
     v.local.stale_origin = ["a", "b"]
     p = parts(v)["cleanup"]
@@ -169,3 +173,58 @@ def test_cleanup_part_offers_one_prune_button_for_stale_origin_refs():
 def test_circuit_chip_counts_stale_refs(client):
     html = client.get("/repo/event-calendar").text
     assert "作業台の片付け · 2本 · 古い記録 1個" in html
+
+
+def test_stale_origin_notice_shows_on_dashboard_status_dev_flag_and_cleanup():
+    from app.explain import status_text, summary
+
+    v = asyncio.run(DemoSource().repo_view("event-calendar"))
+    v.local.dev_dir = WD
+    v.pulls, v.branches = [], []  # 赤ランプ・放置分岐が「次にやること」を先取りしないように
+    assert v.local.origin_stale and v.local.origin_behind == 2
+    sm = summary(v)
+    assert sm["origin_stale"] and "実際より多いかもしれません" in sm["sentence"]
+    assert sm["next"] == "作業台でコミットする"  # 未コミットのほうを先に
+    v.local.dev_uncommitted = 0
+    assert summary(v)["next"] == "作業台の GitHub のコピーを最新にする（fetch）"  # 偽の警告に「push しろ」とは言わない
+    assert "2 コミット古い" in status_text(v) and "実際より多いかもしれません" in status_text(v)
+    p = parts(v)
+    fetch = f'git -C "{WD}" fetch origin'
+    assert [a["cmd"] for a in p["dev"]["actions"]] == [fetch] and p["dev"]["actions"][0]["terminal"]
+    assert "2 コミット古い" in p["dev"]["body"] and fetch in [a["cmd"] for a in p["cleanup"]["actions"]]
+
+    v.local.origin_stale, v.local.origin_behind = False, 0  # 新しい写しなら、何も言わない・ボタンも出さない
+    assert summary(v)["next"] == "作業台から GitHub へ送る（push）"
+    assert "古い状態" not in status_text(v) and p["dev"]["actions"] and not parts(v)["dev"]["actions"]
+    assert fetch not in [a["cmd"] for a in parts(v)["cleanup"]["actions"]]
+
+
+def test_dashboard_marks_unpushed_as_reference_when_the_copy_is_stale(client):
+    html = client.get("/").text
+    assert "未送電※" in html and "GitHub のコピーが古いため" in html
+
+
+def test_mark_origin_lag_counts_commits_or_says_unknown():
+    from app.model import Commit, LocalState, RepoView
+    from app.service import mark_origin_lag
+
+    def view(origin_main, n=8):
+        cs = [Commit(f"{i:040x}", f"c{i}", now()) for i in range(n)]  # 古い順
+        return RepoView("r", "main", cs, [], [], [], local=LocalState(dev_exists=True, origin_main=origin_main)), cs
+
+    v, cs = view(f"{7:040x}")  # 先端と同じ
+    mark_origin_lag(v)
+    assert not v.local.origin_stale
+    v, cs = view(f"{4:040x}")  # 3コミット古い
+    mark_origin_lag(v)
+    assert v.local.origin_stale and v.local.origin_behind == 3
+    v, cs = view("f" * 40)  # 表示範囲（直近8コミット）の外 = かなり古い
+    mark_origin_lag(v)
+    assert v.local.origin_stale and v.local.origin_behind is None
+    v, cs = view("")  # 作業台に origin/main が無いときは判定しない
+    mark_origin_lag(v)
+    assert not v.local.origin_stale
+    v, cs = view(f"{4:040x}")
+    v.local.dev_exists = False
+    mark_origin_lag(v)
+    assert not v.local.origin_stale

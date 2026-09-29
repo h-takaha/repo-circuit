@@ -114,6 +114,9 @@ class LocalState:
 
     dev_exists: bool = False
     dev_dir: str = ""  # 作業台のパス（「ターミナルから実行」のコマンドが git -C で指す）
+    origin_main: str = ""  # 作業台にある GitHub のコピー origin/<既定分岐> の位置
+    origin_stale: bool = False  # そのコピーが GitHub の幹線より古い（このアプリは fetch しない）
+    origin_behind: int | None = None  # 何コミット古いか。幹線の表示範囲の外なら None（かなり古い）
     dev_head: str = ""
     dev_unpushed: int = 0  # 今いる分岐の未 push 数
     dev_branch: str = ""  # 今いる分岐（detached なら空）

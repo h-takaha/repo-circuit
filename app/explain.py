@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .circuit import RUST_DAYS
-from .commands import command, default_workdir, delete_local, prune_origin, push_local, switch_local
+from .commands import command, default_workdir, delete_local, fetch_origin, prune_origin, push_local, switch_local
 from .issues import KINDS, PRIORITIES, board_state, branch_linked_issue, branch_name_for, linked_issue, wire_for
 from .model import RepoView
 from .pipeline import local_totals
@@ -34,10 +34,12 @@ def summary(view: RepoView) -> dict:
             nxt = "自動デプロイのログを確認"
     if uncommitted or unpushed:
         where = f"作業台（{view.local.dev_branch}）" if view.local.dev_branch else "作業台"
-        bits = ([f"未コミットの変更が{uncommitted}つ"] if uncommitted else []) + ([f"GitHub へ送っていないはんだ点が{unpushed}つ"] if unpushed else [])
+        ref = "（作業台の GitHub のコピーが古いため、実際より多いかもしれません）" if view.local.origin_stale else ""
+        bits = ([f"未コミットの変更が{uncommitted}つ"] if uncommitted else []) + ([f"GitHub へ送っていないはんだ点が{unpushed}つ{ref}"] if unpushed else [])
         parts.append(f"{where}に" + "、".join(bits) + "。")
         if nxt == "やることはありません":
-            nxt = "作業台でコミットする" if uncommitted else "作業台から GitHub へ送る（push）"
+            nxt = ("作業台でコミットする" if uncommitted else
+                   "作業台の GitHub のコピーを最新にする（fetch）" if view.local.origin_stale else "作業台から GitHub へ送る（push）")
     if rust:
         parts.append(f"{rust[0].idle_days}日以上はんだ付けされていない分岐が{len(rust)}本。")
         if nxt == "やることはありません":
@@ -72,6 +74,7 @@ def summary(view: RepoView) -> dict:
         "deploy": "自動" if view.autodeploy else "手動",
         "uncommitted": uncommitted,
         "unpushed": unpushed,
+        "origin_stale": view.local.origin_stale,
         "dev_exists": view.local.dev_exists,
         "next": nxt,
         "viz": [
@@ -107,7 +110,9 @@ def status_text(view: RepoView) -> str:
     if uncommitted:
         out.append(f"作業台の {loc.dev_branch or '（分岐なし）'} には、まだコミットしていない変更が {uncommitted} つ。")
     if unpushed:
-        out.append(f"作業台には GitHub に送っていないはんだ点が {unpushed} つ。")
+        out.append(f"作業台には GitHub に送っていないはんだ点が {unpushed} つ" + ("（GitHub のコピーが古いため、実際より多いかもしれません）。" if loc.origin_stale else "。"))
+    if loc.origin_stale:
+        out.append(stale_note(view))
     lag = view.run_behind
     if loc.run_exists and lag:
         out.append(f"GitHub には本番に届いていない変更が {lag} つあります。")
@@ -118,6 +123,20 @@ def status_text(view: RepoView) -> str:
 
 def _act(action: str, label: str, repo: str, danger: bool = False, fields: list[dict] | None = None, **params) -> dict:
     return {"action": action, "label": label, "danger": danger, "params": {"repo": repo, **params}, "fields": fields or []}
+
+
+def stale_note(view: RepoView) -> str:
+    """作業台にある GitHub のコピー（origin/…）が古いときの説明。古くなければ空。"""
+    loc = view.local
+    if not loc.origin_stale:
+        return ""
+    lag = f"{loc.origin_behind} コミット" if loc.origin_behind else "かなり"
+    return (f"作業台にある GitHub のコピー（origin/{view.default_branch}）が、GitHub の幹線より、{lag}古い状態です。"
+            "そのため「未送電」の数は、実際より多く出ることがあります。fetch で最新にできます（作業台のファイルや分岐は変わりません）。")
+
+
+def _fetch_act(view: RepoView, wd: str) -> list[dict]:
+    return _term("GitHub のコピーを最新にする（fetch）", fetch_origin(wd)) if view.local.origin_stale else []
 
 
 def _term(label: str, cmd: str) -> list[dict]:
@@ -164,8 +183,9 @@ def parts(view: RepoView) -> dict[str, dict]:
                   f"点線のはんだ点 {loc.dev_unpushed} つは、まだ GitHub に送っていない（push していない）変更です。"
                   "幹線には直接送らず、分岐を作ってスイッチ経由で合流させましょう。") if loc.dev_unpushed else
                  "あなたの PC の作業フォルダ。幹線の変更はすべて GitHub に送ってあります。")
-                + (f"まだコミットしていない変更が {loc.dev_uncommitted} つあります。" if loc.dev_uncommitted else ""),
-        "actions": [],
+                + (f"まだコミットしていない変更が {loc.dev_uncommitted} つあります。" if loc.dev_uncommitted else "")
+                + stale_note(view),
+        "actions": _fetch_act(view, wd),
     }
     for lb in loc.branches:
         for c in lb.commits:
@@ -286,12 +306,14 @@ def _cleanup_part(view: RepoView, wd: str) -> dict:
         names = "、".join(stale[:CLEANUP_SHOWN]) + ("…" if len(stale) > CLEANUP_SHOWN else "")
         body += (f"また、作業台にある GitHub のコピー（origin/…）に、GitHub にはもう無い古い記録が {len(stale)} 個あります（{names}）。"
                  "GitHub 側で分岐を撤去しても、手元の記録は自動では消えません。1つのコマンドでまとめて片付きます（手元の分岐やファイルは変わりません）。")
+    body += stale_note(view)
     acts: list[dict] = []
     for b in left[:CLEANUP_SHOWN]:
         notes = ("・GitHub にも同名の分岐が残っています" if b.on_github else "") + ("・作ったばかりで、まだ何もはんだ付けしていないかもしれません" if b.fresh else "")
         acts += _term(f"{b.name}（最終 {b.date:%Y-%m-%d}）を消す{notes}", delete_local(wd, b.name))
     if stale:
         acts += _term("古い GitHub のコピー（origin/…）をまとめて掃除する", prune_origin(wd))
+    acts += _fetch_act(view, wd)
     return {
         "title": "作業台の片付け",
         "term": "ローカルブランチ（幹線に入りきり済み）",
