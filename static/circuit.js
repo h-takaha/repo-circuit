@@ -9,7 +9,8 @@
   let current = null;
 
   function setPanel(...nodes) {
-    panel.replaceChildren(...nodes);
+    // null / false は捨てる（replaceChildren に渡すと文字列 "null" として画面に出てしまう）
+    panel.replaceChildren(...nodes.filter((n) => n != null && n !== false));
     // 狭い画面では解説パネルが図の下に来るので、押した部品の説明までスクロールする
     if (window.innerWidth < 1100) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -51,8 +52,11 @@
     highlight(partId);
     setBreaker('ok');
     document.querySelectorAll('.tripping').forEach((n) => n.classList.remove('tripping'));
+    // ボタンごとに「コマンドで言うと」を添える（押す前に、裏で走るコマンドが読める）
     const acts = el('div', { class: 'acts' }, (p.actions || []).map((a) =>
-      el('button', { type: 'button', class: 'btn' + (a.danger ? ' danger' : ''), onclick: () => prepare(a) }, a.label)));
+      el('div', { class: 'act' },
+        el('button', { type: 'button', class: 'btn' + (a.danger ? ' danger' : ''), onclick: () => prepare(a) }, a.label),
+        cmdBlock(a.cmd))));
     setPanel(
       flash ? el('div', { class: 'flash ' + (flash.ok ? 'ok' : 'ng') }, flash.text) : null,
       el('div', { class: 'kicker' }, '部品'),

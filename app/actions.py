@@ -9,6 +9,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .commands import command
 from .guards import ACTIONS, TRIP, WARN, evaluate
 from .issues import build_body, labels_for
 from .model import RepoView
@@ -52,26 +53,22 @@ def normalize(action: str, params: dict) -> dict:
     return p
 
 
-def preview(action: str, p: dict, view: RepoView) -> tuple[list[str], str]:
-    """この操作で起きること（平易な文）と、同じ操作のコマンド。"""
-    r = f"h-takaha/{view.name}"
+def preview(action: str, p: dict, view: RepoView) -> list[str]:
+    """この操作で起きること（平易な文）。同じ操作のコマンドは commands.command()。"""
     if action == "create_issue":
-        return ([f"{view.name} の repo に付箋（Issue）「{p['title']}」が作られます", "ラベル feedback が付き、部品トレイの「未接続」に並びます"],
-                f'gh issue create -R {r} -t "{p["title"]}" -l {",".join(labels_for(p.get("kind", ""), p.get("priority", "")))}')
+        return [f"{view.name} の repo に付箋（Issue）「{p['title']}」が作られます", "ラベル feedback が付き、部品トレイの「未接続」に並びます"]
     if action == "comment_issue":
-        return ([f"付箋 #{p['number']} にメモ（コメント）が追加されます"], f"gh issue comment {p['number']} -R {r}")
+        return [f"付箋 #{p['number']} にメモ（コメント）が追加されます"]
     if action == "close_issue":
-        return ([f"付箋 #{p['number']} が「完了」列に移ります", "GitHub では Closed になり、あとから読み返せます"], f"gh issue close {p['number']} -R {r}")
+        return [f"付箋 #{p['number']} が「完了」列に移ります", "GitHub では Closed になり、あとから読み返せます"]
     if action == "reopen_issue":
-        return ([f"付箋 #{p['number']} が未完了に戻ります"], f"gh issue reopen {p['number']} -R {r}")
+        return [f"付箋 #{p['number']} が未完了に戻ります"]
     if action == "create_branch":
-        return ([f"幹線の最新のはんだ点から分岐 {p['name']} が引き出されます", "分岐で何をしても、合流するまで幹線と本番には影響しません"],
-                f"git switch -c {p['name']} origin/{view.default_branch} && git push -u origin {p['name']}")
+        return [f"幹線の最新のはんだ点から分岐 {p['name']} が引き出されます", "分岐で何をしても、合流するまで幹線と本番には影響しません"]
     if action == "delete_branch":
-        return ([f"分岐 {p['name']} が GitHub から撤去されます"], f"git push origin --delete {p['name']}")
+        return [f"分岐 {p['name']} が GitHub から撤去されます"]
     if action == "create_pr":
-        return ([f"分岐 {p['head']} の戻り口にスイッチ（プルリクエスト）が付きます", "自動チェック（CI）が走り、検査ランプが点きます"],
-                f'gh pr create -R {r} --head {p["head"]} -t "{p["title"]}"')
+        return [f"分岐 {p['head']} の戻り口にスイッチ（プルリクエスト）が付きます", "自動チェック（CI）が走り、検査ランプが点きます"]
     if action == "merge_pr":
         pr = next((x for x in view.pulls if x.number == p["number"]), None)
         lines = [f"スイッチ #{p['number']} が閉じ、分岐のはんだ点が幹線に入ります（マージ）"]
@@ -84,12 +81,12 @@ def preview(action: str, p: dict, view: RepoView) -> tuple[list[str], str]:
         if view.autodeploy:
             lines.append("自動デプロイで、数分以内に本番が新しい版に更新されます")
         lines.append("取り消したいときは、逆向きの変更（revert）で戻せます")
-        return lines, f"gh pr merge {p['number']} -R {r} --merge"
+        return lines
     if action == "close_pr":
-        return ([f"スイッチ #{p['number']} を外します（合流せずに閉じる）", "分岐とはんだ点はそのまま残ります"], f"gh pr close {p['number']} -R {r}")
+        return [f"スイッチ #{p['number']} を外します（合流せずに閉じる）", "分岐とはんだ点はそのまま残ります"]
     if action == "rerun_ci":
-        return ([f"スイッチ #{p['number']} の失敗した検査をやり直します"], f"gh run rerun --failed  # スイッチ #{p['number']} の run")
-    return [], ""
+        return [f"スイッチ #{p['number']} の失敗した検査をやり直します"]
+    return []
 
 
 class Actions:
@@ -107,13 +104,13 @@ class Actions:
         p = normalize(action, params)
         view = await self._view(p["repo"])
         verdicts = evaluate(action, p, view)
-        lines, cmd = preview(action, p, view)
+        lines = preview(action, p, view)
         self._log(action, p, verdicts)
         return {
             "action": action,
             "label": ACTIONS[action],
             "preview": lines,
-            "cmd": cmd,
+            "cmd": command(action, p, view.default_branch),
             "verdicts": [v.to_dict() for v in verdicts],
             "tripped": any(v.level == TRIP for v in verdicts),
             "needs_ack": any(v.level == WARN for v in verdicts),
