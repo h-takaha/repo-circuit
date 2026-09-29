@@ -107,6 +107,7 @@ class LocalState:
     dev_branch: str = ""  # 今いる分岐（detached なら空）
     dev_uncommitted: int = 0  # まだコミットしていないファイルの数
     branches: list[LocalBranch] = field(default_factory=list)
+    unpushed_total: int | None = None  # 軽い読み取り（配電盤）のときだけ: どの origin/* にも無いはんだ点の合計
     run_exists: bool = False
     run_head: str = ""
     run_dirty: bool = False

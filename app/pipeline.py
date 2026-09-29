@@ -36,6 +36,8 @@ def _stage(state: str = "off", text: str = "") -> dict:
 def local_totals(view: RepoView) -> tuple[int, int]:
     """作業台の（未コミットのファイル数, 未送電のはんだ点の数）。"""
     loc = view.local
+    if loc.unpushed_total is not None:
+        return loc.dev_uncommitted, loc.unpushed_total
     unpushed = sum(b.unpushed for b in loc.branches)
     if loc.dev_branch == view.default_branch:
         unpushed += loc.dev_unpushed

@@ -44,9 +44,18 @@ Authorization: Basic ...
 
 ### 検査ランプが「取得不可」の場合
 
-Checks API が 403 を返しても、配電盤と回路図は表示します。該当スイッチの検査状態は
-**取得不可**となり、「検査なし」や「合格」とは扱いません。取得不可の間は、ブレーカーが
-アプリからの合流（マージ）を止めます。確認を押しても解除できません。
+Checks API が 403 を返したときは、代わりに **GitHub Actions の実行結果**（PAT の Actions 読み取り権限）で検査ランプを決めます。
+
+| Actions の状態 | 検査ランプ |
+|---|---|
+| その PR の先端で実行がある | 合格 / 失敗 / 検査中（ワークフローごとに最新の実行を見る） |
+| repo にワークフローが1つも無い | 検査なし（合流は「注意」で確認すれば進める） |
+| ワークフローはあるのに、その先端の実行が無い／Actions API も 403 | **取得不可** |
+
+Actions 以外の外部 CI（GitHub App が付ける check など）の結果は Actions API では見えません。
+
+取得不可のときも配電盤と回路図は表示します。「検査なし」や「合格」とは扱わず、
+ブレーカーがアプリからの合流（マージ）を止めます。確認を押しても解除できません。
 
 Fine-grained PAT は現在 Checks API に対応しておらず、設定画面で Checks 権限を追加することもできません
 （[GitHub の Fine-grained PAT の制約](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#fine-grained-personal-access-tokens-limitations)）。

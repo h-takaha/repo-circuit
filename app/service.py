@@ -15,7 +15,8 @@ class Service:
         self.source = source
         self.autodeploy = {} if settings.demo else load_autodeploy(settings.autodeploy_path)
 
-    async def view(self, name: str) -> RepoView:
+    async def view(self, name: str, detail: bool = True) -> RepoView:
+        """detail=False は配電盤・部品トレイ用。作業台を分岐ごとには読まない（repo が多いと遅いため）。"""
         v = await self.source.repo_view(name)
         if self.settings.demo:
             return v
@@ -27,11 +28,11 @@ class Service:
         if v.head_sha:
             heads[v.default_branch] = v.head_sha
         v.local = await asyncio.to_thread(
-            read_local_state, self.settings.lab_git_dir, self.settings.lab_run_dir, name, ignore, heads, v.default_branch
+            read_local_state, self.settings.lab_git_dir, self.settings.lab_run_dir, name, ignore, heads, v.default_branch, detail
         )
         return v
 
     async def views(self) -> list[RepoView]:
         names = await self.source.repo_names()
-        results = await asyncio.gather(*(self.view(n) for n in names), return_exceptions=True)
+        results = await asyncio.gather(*(self.view(n, detail=False) for n in names), return_exceptions=True)
         return [r for r in results if isinstance(r, RepoView)]

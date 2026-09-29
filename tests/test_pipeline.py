@@ -97,3 +97,10 @@ def test_current_branch_is_shown_even_if_it_was_merged_before():
     assert rs[0]["name"] == "fix/10-holiday" and rs[0]["here"]
     r = _row(rs, "fix/10-holiday")
     assert r["commit"] == ("todo", "未コミット 3") and r["push"] == ("off", "送るはんだ点なし")
+
+
+def test_light_totals_are_used_when_present():
+    v = view()
+    v.local.branches, v.local.unpushed_total = [], 7
+    assert local_totals(v) == (2, 7)
+    assert "GitHub へ送っていないはんだ点が7つ" in summary(v)["sentence"]

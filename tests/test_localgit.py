@@ -119,3 +119,11 @@ def test_branch_missing_from_github_list_falls_back_to_origin_ref(lab):
     st = read_local_state(root / "git", root / "run", "tool", remote_heads={"main": heads["main"]}, default_branch="main")
     feat = next(b for b in st.branches if b.name == "feat")
     assert feat.on_github and feat.unpushed == 1
+
+
+def test_light_read_for_panel_counts_totals_without_branch_details(lab):
+    root, heads = lab
+    st = read_local_state(root / "git", root / "run", "tool", remote_heads=heads, default_branch="main", detail=False)
+    assert st.dev_branch == "feat" and st.dev_uncommitted == 1
+    assert st.unpushed_total == 3  # feat の 1 ＋ local-only の 2
+    assert st.branches == []  # 分岐ごとには読まない
