@@ -27,6 +27,8 @@ from .github import GitHubError, GitHubSource
 from .guards import ACTIONS, RULES
 from .issues import KINDS, PRIORITIES, board_state, labels_for, wire_for
 from .model import Issue, now
+from .pipeline import STAGES
+from .pipeline import rows as pipeline_rows
 from .service import Service
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -116,7 +118,7 @@ def create_app(settings: Settings | None = None, source=None) -> FastAPI:
         order = {"wired": 0, "unwired": 1, "done": 2}
         chips.sort(key=lambda c: (order[c["state"]], c["number"]))
         return render(request, "circuit.html", view=view, scene=layout(view), parts=parts(view), status=status_text(view),
-                      chips=chips[:12], names=names, active="circuit")
+                      chips=chips[:12], names=names, pipeline=pipeline_rows(view), stages=STAGES, active="circuit")
 
     @app.get("/repo", response_class=HTMLResponse)
     async def circuit_index():

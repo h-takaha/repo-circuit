@@ -22,8 +22,12 @@ class Service:
         cfg = self.autodeploy.get(name)
         v.autodeploy = cfg is not None
         ignore = list(cfg.get("noRestartPaths", [])) if cfg and cfg.get("pullStrategy") == "preserve-local" else []
+        # 送電済みかどうかは GitHub 上の分岐の位置で判断する（作業台の origin/* は fetch しないので古いことがある）
+        heads = {b.name: b.sha for b in v.branches if b.sha}
+        if v.head_sha:
+            heads[v.default_branch] = v.head_sha
         v.local = await asyncio.to_thread(
-            read_local_state, self.settings.lab_git_dir, self.settings.lab_run_dir, name, ignore
+            read_local_state, self.settings.lab_git_dir, self.settings.lab_run_dir, name, ignore, heads, v.default_branch
         )
         return v
 

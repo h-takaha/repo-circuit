@@ -54,7 +54,14 @@ def layout(view: RepoView) -> Scene:
     main_x = {c.sha: _main_x(i, n_main) for i, c in enumerate(main)}
     index = {c.sha: i for i, c in enumerate(main)}
 
-    branches = sorted(view.branches, key=lambda b: index.get(b.merge_base, -1))
+    # GitHub にまだ無い、作業台だけの分岐も点線で描く
+    local_only = [
+        Branch(lb.name, lb.head, lb.unpushed, 0, lb.commits, lb.base, lb.last_date)
+        for lb in view.local.branches
+        if not lb.on_github and lb.unpushed and view.branch(lb.name) is None
+    ]
+    local_names = {b.name for b in local_only}
+    branches = sorted(view.branches + local_only, key=lambda b: index.get(b.merge_base, -1))
     hidden = max(0, len(branches) - MAX_LANES)
     branches = branches[:MAX_LANES]
     lanes = len(branches)
@@ -77,7 +84,7 @@ def layout(view: RepoView) -> Scene:
         base_x = main_x.get(b.merge_base, MAIN_LEFT - 20)
         jx = max(base_x, prev_jx + 28, 30)
         prev_jx = jx
-        _branch(s, view, b, jx, lane_y, return_x.get(b.name))
+        _branch(s, view, b, jx, lane_y, return_x.get(b.name), b.name in local_names)
 
     # 幹線のはんだ点と、本番マーカー・作業台マーカー
     behind = view.run_behind
@@ -96,14 +103,16 @@ def layout(view: RepoView) -> Scene:
     return s
 
 
-def _branch(s: Scene, view: RepoView, b: Branch, jx: float, y: float, rx: float | None) -> None:
+def _branch(s: Scene, view: RepoView, b: Branch, jx: float, y: float, rx: float | None, local_only: bool = False) -> None:
+    """local_only: GitHub にまだ無い、作業台だけの分岐（点線で描く）。"""
     pr = view.pull_for(b.name)
-    rusty = pr is None and b.idle_days >= RUST_DAYS
-    wire_cls = "rust" if rusty else "w"
+    lb = view.local_branch(b.name)
+    rusty = not local_only and pr is None and b.idle_days >= RUST_DAYS
+    wire_cls = "dev" if local_only else ("rust" if rusty else "w")
     pivot = (rx - 76) if rx else min(RETURN_RIGHT - 60, max(jx + 220, 420))
     if pivot < jx + 120:
         pivot = jx + 120
-    part = f"branch:{b.name}"
+    part = f"local:{b.name}" if local_only else f"branch:{b.name}"
 
     s.paths.append({"d": f"M{jx:.0f} {s.bus_y}V{y:.0f}H{pivot:.0f}", "cls": wire_cls})
     s.dots.append({"x": jx, "y": s.bus_y, "r": 6, "cls": "jn"})
@@ -117,15 +126,25 @@ def _branch(s: Scene, view: RepoView, b: Branch, jx: float, y: float, rx: float 
         s.hits.append({"x": jx + 16, "y": y - 20, "w": 76, "h": 40, "part": f"issue:{issue.number}", "label": f"付箋 #{issue.number}"})
         start = jx + 110
 
-    dots = b.commits[-MAX_DOTS:]
+    # GitHub にある分岐でも、作業台で足してまだ送っていないはんだ点は点線で右に続ける
+    unsent = lb.commits[-3:] if lb and not local_only else []
+    kept = b.commits[-(MAX_DOTS - len(unsent)):]
+    base_cls = "commit-dev" if local_only else ("commit-rust" if rusty else "commit")
+    dots = [(c, base_cls) for c in kept] + [(c, "commit-dev") for c in unsent]
     span = max(pivot - 24 - start, 1)
-    for i, c in enumerate(dots):
+    for i, (c, cls) in enumerate(dots):
         x = start + span * (i + 0.5) / len(dots)
-        s.dots.append({"x": x, "y": y, "r": 6, "cls": "commit-rust" if rusty else "commit"})
+        s.dots.append({"x": x, "y": y, "r": 6, "cls": cls})
         s.hits.append({"x": x - 12, "y": y - 12, "w": 24, "h": 24, "part": f"commit:{c.sha}", "label": f"はんだ点 {c.headline}"})
-    if len(b.commits) > MAX_DOTS:
-        s.texts.append({"x": start, "y": y - 14, "t": f"+{len(b.commits) - MAX_DOTS}", "cls": "lblm"})
-    label = b.name + (f" · {b.idle_days}日放置" if rusty else "")
+    hidden = (b.ahead if local_only else len(b.commits)) - len(kept)
+    if hidden > 0:
+        s.texts.append({"x": start, "y": y - 14, "t": f"+{hidden}", "cls": "lblm"})
+    if local_only:
+        # 下の段の検査ランプとぶつからないよう、ラベルは名前だけにし、「作業台のみ」は配線の上に書く
+        label = b.name
+        s.texts.append({"x": start + (30 if hidden > 0 else 0), "y": y - 14, "t": f"作業台のみ · 未送電 {b.ahead}", "cls": "lblm devt"})
+    else:
+        label = b.name + (f" · {b.idle_days}日放置" if rusty else "") + (f" · 未送電 {lb.unpushed}" if lb and lb.unpushed else "")
     s.texts.append({"x": jx + 22, "y": y + 32, "t": label, "cls": "lblm"})
     s.hits.append({"x": jx + 22, "y": y + 18, "w": min(8 * len(label) + 10, max(pivot - jx - 30, 60)), "h": 20, "part": part, "label": f"分岐 {b.name}"})
 
@@ -164,7 +183,8 @@ def _markers(s: Scene, view: RepoView, main_x: dict[str, float]) -> None:
         else:
             s.texts.append({"x": MAIN_LEFT, "y": y + 30, "t": "本番: この表示より古い版", "cls": "lblm runt"})
             s.hits.append({"x": MAIN_LEFT - 4, "y": y + 16, "w": 180, "h": 20, "part": "run", "label": "本番マーカー"})
-    if view.local.dev_exists and view.local.dev_unpushed > 0 and main:
+    # 幹線の上の「作業台」旗は、作業台で幹線そのものにいるときだけ（分岐の未送電は分岐の配線に点線で描く）
+    if view.local.dev_exists and view.local.dev_branch == view.default_branch and view.local.dev_unpushed > 0 and main:
         lx = main_x[main[-1].sha]
         k = min(view.local.dev_unpushed, 3)
         end = lx + 40 + 44 * k

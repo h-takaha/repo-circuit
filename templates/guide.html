@@ -26,7 +26,26 @@
     <rect x="670" y="30" width="220" height="60" rx="8" class="w"></rect>
     <text x="780" y="56" class="lbl mid">本番（稼働クローン）</text><text x="780" y="76" class="lblm mid">C:\lab\run\&lt;tool&gt;</text>
   </svg>
-  <span class="ds">回路図の幹線は GitHub の main です。その上に立つ2本の旗が、<b>作業台</b>（まだ送っていない変更＝点線）と<b>本番はここまで</b>（本番に届いている位置）を示します。このアプリは作業台と本番を読むだけで、書き込みません。</span>
+  <span class="ds">回路図の幹線は GitHub の main です。その上に立つ旗が<b>本番はここまで</b>（本番に届いている位置）を示し、作業台（この PC）にだけあってまだ送っていない分岐やはんだ点は<b>点線</b>で描きます（幹線で直接作業しているときは、幹線の上に<b>作業台</b>の旗が立ちます）。このアプリは作業台と本番を読むだけで、書き込みません。</span>
+</section>
+
+<section class="card pipe" style="padding:16px 20px">
+  <span class="nm">工程表 — 分岐がいまどの段にいるか</span>
+  <span class="ds">回路図の上の表は、分岐ごとに次の6段を左から並べます。作業台（この PC）でしか分からない未コミット・未送電も、GitHub の検査や合流と同じ行で見えます。</span>
+  <table>
+    <thead><tr><th>段</th><th>GitHub 用語</th><th>どこを見ているか</th></tr></thead>
+    <tbody>
+      <tr><td>はんだ付け</td><td>コミット</td><td class="ds">作業台で、まだコミットしていないファイルの数（いま開いている分岐だけ）</td></tr>
+      <tr><td>送電</td><td>push</td><td class="ds">作業台の分岐が GitHub の分岐より進んでいる数。「作業台のみ」はまだ一度も送っていない分岐。「GitHub が先行」は GitHub 側に作業台に無い変更がある（このアプリは fetch しない）</td></tr>
+      <tr><td>スイッチ</td><td>プルリクエスト</td><td class="ds">GitHub にスイッチが付いているか</td></tr>
+      <tr><td>検査</td><td>CI</td><td class="ds">検査ランプの色</td></tr>
+      <tr><td>合流</td><td>マージ</td><td class="ds">「閉じられる」ならスイッチを閉じてよい。合流済みの分岐も直近の数本を表示</td></tr>
+      <tr><td>本番</td><td>デプロイ</td><td class="ds">合流でできたはんだ点に、本番マーカーが追いついたか</td></tr>
+    </tbody>
+  </table>
+  <span class="ds">
+    <span class="pst ok"><i></i>済</span>　<span class="pst todo"><i></i>あなたの番</span>　<span class="pst wait"><i></i>待ち</span>　<span class="pst bad"><i></i>止まっている</span>　<span class="pst na"><i></i>分からない</span>　<span class="pst off"><i></i>まだ</span>
+  </span>
 </section>
 
 <div class="legend">
@@ -38,6 +57,7 @@
   <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><circle class="led-g" cx="24" cy="24" r="9"></circle><circle class="led-y" cx="48" cy="24" r="9"></circle><circle class="led-r" cx="72" cy="24" r="9"></circle></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">検査ランプ</span><span class="gh">CI（自動チェック）</span></div><div class="ds">緑=合格、黄=検査中、赤=失敗。赤と黄のスイッチは閉じられない。灰色で「取得不可」=検査結果を読めない状態。検査なしとは異なり、アプリからは閉じられない。</div></div></div>
   <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="bus" d="M4 24H26"></path><circle class="lamp on" cx="48" cy="24" r="18"></circle><path class="fil" d="M38 14L58 34M58 14L38 34"></path></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">本番ランプ</span><span class="gh">デプロイ先 C:\lab\run</span></div><div class="ds">いま動いているツール。自動デプロイ対象は、合流すると数分で更新される。</div></div></div>
   <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="bus" d="M4 30H92"></path><path class="mark-run" d="M41 6H55L48 18Z"></path><path class="dev" d="M60 30L70 12H92"></path></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">旗（本番・作業台）</span><span class="gh">稼働クローン / 開発リポジトリ</span></div><div class="ds">本番がどこまで追いついているか、作業台にまだ送っていない変更があるかを示す。</div></div></div>
+  <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="bus" d="M8 12H88"></path><path class="dev" d="M20 12V36H76"></path><circle class="commit-dev" cx="48" cy="36" r="6"></circle></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">点線の分岐・はんだ点</span><span class="gh">未 push のブランチ / コミット</span></div><div class="ds">作業台（この PC）にだけあって、まだ GitHub に送っていない分岐やはんだ点。送るまでは GitHub にも本番にも無い。</div></div></div>
   <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="rust" d="M8 24H88"></path></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">錆びた配線</span><span class="gh">放置ブランチ</span></div><div class="ds">長く手が付いていない分岐。合流するか、要らないか判断しよう。</div></div></div>
   <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="w" d="M8 16H88M8 32H88"></path><path class="spark" d="M44 8L52 20L42 26L54 40"></path></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">ショート（火花）</span><span class="gh">コンフリクト</span></div><div class="ds">同じ場所を別々の分岐で直した状態。解消するまでスイッチは閉じられない。</div></div></div>
 </div>

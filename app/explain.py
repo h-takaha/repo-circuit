@@ -5,6 +5,7 @@ from __future__ import annotations
 from .circuit import RUST_DAYS
 from .issues import KINDS, PRIORITIES, board_state, branch_linked_issue, branch_name_for, linked_issue, wire_for
 from .model import RepoView
+from .pipeline import local_totals
 
 CI_WORD = {"success": "合格（緑）", "failure": "失敗（赤）", "pending": "検査中（黄）", "none": "検査なし", "unavailable": "取得不可"}
 
@@ -19,6 +20,7 @@ def summary(view: RepoView) -> dict:
     unavailable = [p for p in view.pulls if p.ci == "unavailable"]
     lag = view.run_behind
     lagging = view.local.run_exists and (lag is None or lag >= 3)
+    uncommitted, unpushed = local_totals(view)
 
     parts: list[str] = []
     nxt = "やることはありません"
@@ -29,6 +31,12 @@ def summary(view: RepoView) -> dict:
         parts.append("本番が幹線に追いついていません。")
         if not fail:
             nxt = "自動デプロイのログを確認"
+    if uncommitted or unpushed:
+        where = f"作業台（{view.local.dev_branch}）" if view.local.dev_branch else "作業台"
+        bits = ([f"未コミットの変更が{uncommitted}つ"] if uncommitted else []) + ([f"GitHub へ送っていないはんだ点が{unpushed}つ"] if unpushed else [])
+        parts.append(f"{where}に" + "、".join(bits) + "。")
+        if nxt == "やることはありません":
+            nxt = "作業台でコミットする" if uncommitted else "作業台から GitHub へ送る（push）"
     if rust:
         parts.append(f"{rust[0].idle_days}日以上はんだ付けされていない分岐が{len(rust)}本。")
         if nxt == "やることはありません":
@@ -45,8 +53,6 @@ def summary(view: RepoView) -> dict:
         parts.append(f"検査ランプが取得不可のスイッチが{len(unavailable)}つ。アプリからは合流できません。")
         if nxt == "やることはありません":
             nxt = "検査結果の読み取り権限を確認"
-    if view.local.dev_unpushed:
-        parts.append(f"作業台に GitHub へ送っていない変更が{view.local.dev_unpushed}つ。")
     unwired = [i for i in open_issues if board_state(view, i) == "unwired"]
     if unwired and nxt == "やることはありません":
         nxt = f"付箋 #{unwired[0].number} 用に分岐を引く"
@@ -63,6 +69,9 @@ def summary(view: RepoView) -> dict:
         "branches": len(view.branches),
         "prs": len(view.pulls),
         "deploy": "自動" if view.autodeploy else "手動",
+        "uncommitted": uncommitted,
+        "unpushed": unpushed,
+        "dev_exists": view.local.dev_exists,
         "next": nxt,
         "viz": [
             {
@@ -93,8 +102,11 @@ def status_text(view: RepoView) -> str:
     if rust:
         out.append(f"{RUST_DAYS} 日以上放置された分岐が {rust} 本。")
     loc = view.local
-    if loc.dev_unpushed:
-        out.append(f"作業台には GitHub に送っていない変更が {loc.dev_unpushed} つ。")
+    uncommitted, unpushed = local_totals(view)
+    if uncommitted:
+        out.append(f"作業台の {loc.dev_branch or '（分岐なし）'} には、まだコミットしていない変更が {uncommitted} つ。")
+    if unpushed:
+        out.append(f"作業台には GitHub に送っていないはんだ点が {unpushed} つ。")
     lag = view.run_behind
     if loc.run_exists and lag:
         out.append(f"GitHub には本番に届いていない変更が {lag} つあります。")
@@ -143,13 +155,39 @@ def parts(view: RepoView) -> dict[str, dict]:
     }
     out["dev"] = {
         "title": "作業台マーカー",
-        "term": f"開発リポジトリ C:\\lab\\git\\{r}",
-        "body": (f"あなたの PC の作業フォルダ。点線のはんだ点 {loc.dev_unpushed} つは、まだ GitHub に送っていない（push していない）変更です。"
-                 "送るまでは GitHub にも本番にも存在しません。" if loc.dev_unpushed else
-                 "作業台の変更はすべて GitHub に送ってあります。"),
-        "cmd": f"git -C C:\\lab\\git\\{r} log origin/HEAD..HEAD",
+        "term": f"開発リポジトリ C:\\lab\\git\\{r}（いまの分岐: {loc.dev_branch or 'なし'}）",
+        "body": ((f"あなたの PC の作業フォルダで、幹線 {view.default_branch} に直接はんだ付けしています。"
+                  f"点線のはんだ点 {loc.dev_unpushed} つは、まだ GitHub に送っていない（push していない）変更です。"
+                  "幹線には直接送らず、分岐を作ってスイッチ経由で合流させましょう。") if loc.dev_unpushed else
+                 "あなたの PC の作業フォルダ。幹線の変更はすべて GitHub に送ってあります。")
+                + (f"まだコミットしていない変更が {loc.dev_uncommitted} つあります。" if loc.dev_uncommitted else ""),
+        "cmd": f"git -C C:\\lab\\git\\{r} status",
         "actions": [],
     }
+    for lb in loc.branches:
+        for c in lb.commits:
+            out[f"commit:{c.sha}"] = {
+                "title": f"送っていないはんだ点「{c.headline}」",
+                "term": f"コミット {c.short}（作業台だけにある・未 push）",
+                "body": f"{c.date:%Y-%m-%d %H:%M} に作業台で記録した変更。まだ GitHub に送っていないので、GitHub にも本番にもありません。"
+                        f"分岐 {lb.name} を push すると GitHub に届きます。",
+                "cmd": f"git -C C:\\lab\\git\\{r} push" + ("" if lb.on_github else f" -u origin {lb.name}"),
+                "actions": [],
+            }
+        if lb.on_github or view.branch(lb.name):
+            continue
+        here = lb.name == loc.dev_branch
+        out[f"local:{lb.name}"] = {
+            "title": f"作業台だけの分岐 {lb.name}",
+            "term": "ローカルブランチ（未 push）",
+            "body": (f"あなたの PC の作業フォルダにだけある分岐。はんだ点 {lb.unpushed} つを、まだ一度も GitHub に送っていません。"
+                     "送るまでは GitHub にも本番にも存在せず、スイッチ（プルリクエスト）も付けられません。"
+                     + ("いま作業台で開いている分岐です。" if here else "")
+                     + (f"まだコミットしていない変更も {loc.dev_uncommitted} つあります。" if here and loc.dev_uncommitted else "")
+                     + "このアプリは作業台に書き込まないので、送るのはあなたのターミナルから行います。"),
+            "cmd": f"git -C C:\\lab\\git\\{r} push -u origin {lb.name}",
+            "actions": [],
+        }
     commits = {c.sha: c for c in view.main_commits}
     for b in view.branches:
         for c in b.commits:
@@ -166,6 +204,7 @@ def parts(view: RepoView) -> dict[str, dict]:
         pr = view.pull_for(b.name)
         n = branch_linked_issue(view, b.name)
         issue = view.issue(n) if n else None
+        lb = view.local_branch(b.name)
         acts = []
         if not pr:
             default_title = issue.title if issue else b.name
@@ -182,7 +221,9 @@ def parts(view: RepoView) -> dict[str, dict]:
             "body": (f"幹線から引き出した作業用の配線。ここで何度はんだ付け（コミット）しても、幹線と本番には影響しません。"
                      f"幹線より {b.ahead} 進み、{b.behind} 遅れています。"
                      + (f"{b.idle_days} 日間はんだ付けされていません。" if rusty else "")
-                     + (f"付箋 #{issue.number} が差し込まれています。" if issue else "")),
+                     + (f"付箋 #{issue.number} が差し込まれています。" if issue else "")
+                     + (f"作業台には、まだ GitHub に送っていないはんだ点が {lb.unpushed} つあります（点線）。" if lb and lb.unpushed else "")
+                     + ("GitHub 側に作業台に無いはんだ点があります（作業台に取り込むには git pull）。" if lb and lb.github_ahead else "")),
             "cmd": f"git switch {b.name}",
             "actions": acts,
         }

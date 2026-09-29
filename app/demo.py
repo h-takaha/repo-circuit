@@ -6,7 +6,7 @@ import copy
 import hashlib
 from datetime import timedelta
 
-from .model import Branch, Commit, Issue, LocalState, PullRequest, RepoView, now
+from .model import Branch, Commit, Issue, LocalBranch, LocalState, PullRequest, RepoView, now
 
 
 def _sha(seed: str) -> str:
@@ -76,12 +76,29 @@ def build_demo() -> dict[str, RepoView]:
             _issue(r, 15, "夜間更新のログが見づらい", "improvement", "p3"),
             _issue(r, 10, "祝日が反映されない", "bug", "p1", state="closed", days=20),
         ],
-        closed_pulls=[PullRequest(11, "祝日を反映", "Fixes #10", "fix/10-holiday", "main", "closed", True, False, _sha("x"), "success", "clean")],
-        local=LocalState(dev_exists=True, dev_head=_sha("dev"), dev_unpushed=2, run_exists=True, run_head=main[-2].sha, run_dirty=False),
+        closed_pulls=[
+            PullRequest(9, "ログ出力を整理", "", "fix/9-log-format", "main", "closed", True, False, _sha("y"), "none", "unknown",
+                        merge_commit_sha=main[-1].sha),
+            PullRequest(11, "祝日を反映", "Fixes #10", "fix/10-holiday", "main", "closed", True, False, _sha("x"), "none", "unknown",
+                        merge_commit_sha=main[2].sha),
+        ],
+        local=LocalState(dev_exists=True, run_exists=True, run_head=main[-2].sha, run_dirty=False),
         autodeploy=True,
         url=f"https://github.com/h-takaha/{r}",
     )
     b = views[r].branches
+    # 作業台: CSV の分岐で作業中（未コミット 2）。ボタンの分岐は未送電 1、GitHub にまだ無い試作の分岐が1本
+    unsent = _commits(r, "local:fix/12-button-size", ["押下時の色を調整"], 0)
+    idea = _commits(r, "local:exp/local-idea", ["週表示の試作", "週表示のテスト"], 1)
+    views[r].local = LocalState(
+        dev_exists=True, dev_head=b[1].sha, dev_branch="fix/14-csv-encoding", dev_uncommitted=2,
+        run_exists=True, run_head=main[-2].sha,
+        branches=[
+            LocalBranch("fix/14-csv-encoding", b[1].sha, on_github=True),
+            LocalBranch("fix/12-button-size", unsent[-1].sha, unpushed=1, on_github=True, commits=unsent),
+            LocalBranch("exp/local-idea", idea[-1].sha, unpushed=2, commits=idea, base=main[-1].sha, last_date=idea[-1].date),
+        ],
+    )
     views[r].pulls = [
         _pr(r, 5, "追加ボタンを押しやすくする", "fix/12-button-size", b[2].sha, "success", 12),
         _pr(r, 6, "CSV の文字化けを直す", "fix/14-csv-encoding", b[1].sha, "failure", 14),
@@ -210,6 +227,7 @@ class DemoSource:
         if b:
             v.main_commits.extend(b.commits)
             v.main_commits.append(Commit(sha=_sha(f"merge:{number}"), message=f"Merge pull request #{number}", date=now()))
+            pr.merge_commit_sha = v.main_commits[-1].sha
             b.commits, b.ahead, b.behind = [], 0, 0
         pr.state, pr.merged = "closed", True
         v.pulls.remove(pr)

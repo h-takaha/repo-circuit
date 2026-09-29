@@ -184,6 +184,7 @@ class GitHubSource:
             ci=ci,
             mergeable_state=mergeable_state,
             url=p.get("html_url", ""),
+            merge_commit_sha=(p.get("merge_commit_sha") or "") if p.get("merged_at") else "",
         )
 
     # ---- 書き込み（actions.py からだけ呼ぶ）----
