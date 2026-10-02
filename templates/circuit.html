@@ -4,9 +4,11 @@
 <div class="cwrap">
   <aside class="ctray">
     {% if view.local.dev_exists %}
-    {% set tidy = view.local.merged or view.local.stale_origin %}
+      {% set completed = [] %}
+      {% for b in view.branches %}{% if view.completed_branch(b.name) %}{% set _ = completed.append(b) %}{% endif %}{% endfor %}
+      {% set tidy = view.local.merged or view.local.stale_origin or completed %}
     <button type="button" class="chipbtn {{ 'unwired' if tidy else 'done' }}" data-part="cleanup">
-      <span class="mono" style="font-size:12px;font-weight:600">作業台の片付け · {{ view.local.merged|length }}本{% if view.local.stale_origin %} · 古い記録 {{ view.local.stale_origin|length }}個{% endif %}</span>
+        <span class="mono" style="font-size:12px;font-weight:600">作業台の片付け · {{ view.local.merged|length }}本{% if completed %} · GitHub 合流済み {{ completed|length }}本{% endif %}{% if view.local.stale_origin %} · 古い記録 {{ view.local.stale_origin|length }}個{% endif %}</span>
       <span style="font-size:14px;font-weight:500;line-height:1.45">{{ '幹線に入りきった分岐や、GitHub にもう無い古い記録が残っています' if tidy else '片付けるものはありません' }}</span>
     </button>
     {% endif %}
@@ -86,7 +88,7 @@
     <h2>電気が流れる＝変更が本番に届く</h2>
     <p>太い銅色の線が<b>幹線</b>（main）。右端の<b>本番ランプ</b>につながっています。下に垂れた配線が<b>分岐</b>（ブランチ）で、戻り口の<b>スイッチ</b>（プルリクエスト）を閉じると幹線に合流し、電気が本番まで届きます。</p>
     <p>スイッチ横の<b>検査ランプ</b>が緑なら閉じてOK。危ない操作をしようとすると<b>ブレーカー</b>が落ちて止め、理由を教えます。</p>
-    <p>幹線の上の旗は、<b>本番はここまで</b>（稼働クローンの位置）と<b>作業台</b>（あなたの PC の開発フォルダ）です。</p>
+    <p>旗は、<b>本番はここまで</b>（稼働クローンの位置）と<b>作業台</b>（あなたの PC の開発フォルダ）です。同じ位置でも上下に分けて示します。</p>
   </aside>
 </div>
 <script type="application/json" id="parts-data">{{ parts|tojson }}</script>

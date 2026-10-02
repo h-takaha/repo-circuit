@@ -56,7 +56,7 @@ def test_markers_and_switches_present():
     assert any(d["cls"] == "commit-pending" for d in s.dots)  # 本番に届いていないはんだ点
     assert sum(d["cls"] == "commit-dev" for d in s.dots) == 3  # 未送電: ボタンの分岐に1、作業台だけの分岐に2
     assert any(t["t"] == "作業台のみ · 未送電 2" for t in s.texts)
-    assert "dev" not in {h["part"] for h in s.hits}  # 分岐で作業中なので、幹線の上の作業台旗は出さない
+    assert "dev" in {h["part"] for h in s.hits}  # 分岐で作業中でも、実際の HEAD の位置を示す
 
 
 def test_dev_flag_on_bus_only_when_working_on_main():

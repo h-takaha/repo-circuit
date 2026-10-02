@@ -80,6 +80,16 @@ def test_create_pr_rules():
     assert ids("create_pr", {"head": "fix/12-button-size", "title": "t", "body": "Fixes #12"}, v)["pr_exists"] == TRIP
 
 
+@pytest.mark.parametrize('unpushed, dirty, trips', [(0, 0, False), (1, 0, True), (0, 1, True)])
+def test_delete_local_work_breaker(unpushed, dirty, trips):
+    v = view()
+    name = v.local.dev_branch
+    v.local_branch(name).unpushed = unpushed
+    v.local.dev_unpushed = unpushed
+    v.local.dev_uncommitted = dirty
+    assert ('delete_local_work' in ids('delete_branch', {'name': name}, v)) == trips
+
+
 @pytest.mark.parametrize("text", [
     "token: ghp_abcdefghijklmnopqrstuvwxyz0123",
     "password=hunter22",

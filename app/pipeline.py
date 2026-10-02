@@ -56,17 +56,14 @@ def rows(view: RepoView) -> list[dict]:
         names.append(loc.dev_branch)
     names += [b.name for b in loc.branches if b.name not in names]
     names += [b.name for b in view.branches if b.name not in names]
-    merged_heads = {p.head for p in view.closed_pulls if p.merged}
     for name in names:
-        gb, lb = view.branch(name), view.local_branch(name)
-        if (name in merged_heads and name != loc.dev_branch and (gb is None or gb.ahead == 0)
-                and not (lb and lb.unpushed) and not view.pull_for(name)):
+        if view.completed_branch(name):
             continue  # 合流済みで新しいはんだ点の無い分岐（撤去済みも含む）は、下の「合流済み」の行で見せる
         row = _branch_row(view, name)
         if row:
             out.append(row)
 
-    merged = [p for p in view.closed_pulls if p.merged][:MAX_MERGED]
+    merged = [p for p in view.closed_pulls if p.merged and p.base == view.default_branch][:MAX_MERGED]
     out += [_merged_row(view, p) for p in merged]
     return out[:MAX_ROWS]
 
@@ -128,6 +125,9 @@ def _branch_row(view: RepoView, name: str) -> dict | None:
             nxt = nxt or {"failure": "検査ランプの失敗ログを見て、分岐に修正をはんだ付けする",
                           "pending": "検査が終わるのを待つ",
                           "unavailable": "検査結果を読める権限を用意する"}.get(pr.ci, "下書きを仕上げる")
+    elif view.merged_for(name):
+        st["merge"] = _stage("off", "前回合流済み")
+        nxt = nxt or "新しい変更をはんだ付けして、GitHub へ送る"
     elif gb and gb.ahead == 0 and not (lb and lb.unpushed):
         nxt = nxt or "幹線に無いはんだ点がありません。はんだ付けするか、要らなければ分岐を撤去する"
     elif gb:
@@ -144,7 +144,7 @@ def _merged_row(view: RepoView, pr) -> dict:
     st["check"] = _stage("ok", "—")
     st["prod"], nxt = _prod(view, pr.merge_commit_sha)
     part = f"commit:{pr.merge_commit_sha}" if any(c.sha == pr.merge_commit_sha for c in view.main_commits) else "run"
-    return {"name": pr.head, "part": part, "here": False, "stages": _ordered(st), "next": nxt, "warn": False, "merged": True}
+    return {"name": pr.head, "part": part, "here": view.local.dev_branch == pr.head and view.completed_branch(pr.head), "stages": _ordered(st), "next": nxt, "warn": False, "merged": True}
 
 
 def _prod(view: RepoView, sha: str) -> tuple[dict, str]:

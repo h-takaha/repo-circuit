@@ -127,6 +127,9 @@ class GitHubSource:
         main_commits = [_commit(c) for c in reversed(main_raw)]
         others = [b for b in branches_raw if b["name"] != default][:MAX_BRANCHES]
         branches = await asyncio.gather(*(self._branch(r, default, b["name"]) for b in others))
+        # compare のコミット一覧は behind 時に空になる。先端の正本は /branches。
+        for branch, raw in zip(branches, others):
+            branch.sha = raw.get("commit", {}).get("sha") or branch.sha
         pulls = await asyncio.gather(*(self._pull(r, p) for p in pulls_raw))
         closed = [self._pull_basic(p, "none", "unknown") for p in closed_raw]
         issues = [

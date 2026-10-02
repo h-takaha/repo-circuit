@@ -168,6 +168,28 @@ class RepoView:
                 return b
         return None
 
+    def merged_for(self, name: str) -> PullRequest | None:
+        """同名というだけでなく、現在の GitHub 先端が合流済み PR の先端と一致するか。"""
+        b = self.branch(name)
+        if self.pull_for(name):
+            return None
+        return next((p for p in self.closed_pulls
+                     if p.merged and p.base == self.default_branch and p.head == name
+                     and (b is None or (b.sha and b.sha == p.head_sha) or b.ahead == 0)), None)
+
+    def local_work(self, name: str) -> bool:
+        lb = self.local_branch(name)
+        return bool((lb and lb.unpushed) or
+                    (self.local.dev_branch == name and (self.local.dev_uncommitted or self.local.dev_unpushed)))
+
+    def completed_branch(self, name: str) -> bool:
+        return self.merged_for(name) is not None and not self.local_work(name)
+
+    @property
+    def dev_behind(self) -> int | None:
+        shas = [c.sha for c in self.main_commits]
+        return len(shas) - 1 - shas.index(self.local.dev_head) if self.local.dev_head in shas else None
+
     @property
     def head_sha(self) -> str:
         return self.main_commits[-1].sha if self.main_commits else ""
