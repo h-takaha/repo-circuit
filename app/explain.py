@@ -14,7 +14,8 @@ CI_WORD = {"success": "合格（緑）", "failure": "失敗（赤）", "pending"
 def summary(view: RepoView) -> dict:
     """配電盤の1行ぶん。"""
     open_issues = [i for i in view.issues if i.state == "open"]
-    rust = [b for b in view.branches if not view.pull_for(b.name) and b.idle_days >= RUST_DAYS]
+    active = [b for b in view.branches if not view.completed_branch(b.name)]
+    rust = [b for b in active if not view.pull_for(b.name) and b.idle_days >= RUST_DAYS]
     fail = [p for p in view.pulls if p.ci == "failure" or p.mergeable_state == "dirty"]
     ready = [p for p in view.pulls if p.ci == "success" and p.mergeable_state != "dirty" and not p.draft]
     pending = [p for p in view.pulls if p.ci == "pending"]
@@ -69,7 +70,7 @@ def summary(view: RepoView) -> dict:
         "led": led,
         "sentence": "".join(parts),
         "issues": len(open_issues),
-        "branches": len(view.branches),
+        "branches": len(active),
         "prs": len(view.pulls),
         "deploy": "自動" if view.autodeploy else "手動",
         "uncommitted": uncommitted,
@@ -84,18 +85,19 @@ def summary(view: RepoView) -> dict:
                          "run" if (p and p.ci == "pending") else
                          "rust" if b.idle_days >= RUST_DAYS else "work"),
             }
-            for b in view.branches[:5]
+            for b in active[:5]
             for p in [view.pull_for(b.name)]
         ],
     }
 
 
 def status_text(view: RepoView) -> str:
-    n = len(view.branches)
+    active = [b for b in view.branches if not view.completed_branch(b.name)]
+    n = len(active)
     ready = sum(1 for p in view.pulls if p.ci == "success" and p.mergeable_state != "dirty")
     fail = sum(1 for p in view.pulls if p.ci == "failure")
     unavailable = sum(1 for p in view.pulls if p.ci == "unavailable")
-    rust = sum(1 for b in view.branches if not view.pull_for(b.name) and b.idle_days >= RUST_DAYS)
+    rust = sum(1 for b in active if not view.pull_for(b.name) and b.idle_days >= RUST_DAYS)
     out = [f"{view.name} には、幹線に合流していない分岐が {n} 本あります。" if n else f"{view.name} の分岐はすべて幹線に合流済みです。"]
     if ready:
         out.append(f"合流の準備ができたスイッチが {ready} つ（検査ランプ緑）。")
@@ -181,8 +183,13 @@ def parts(view: RepoView) -> dict[str, dict]:
         "term": f"開発リポジトリ C:\\lab\\git\\{r}（いまの分岐: {loc.dev_branch or 'なし'}）",
         "body": ((f"あなたの PC の作業フォルダで、幹線 {view.default_branch} に直接はんだ付けしています。"
                   f"点線のはんだ点 {loc.dev_unpushed} つは、まだ GitHub に送っていない（push していない）変更です。"
-                  "幹線には直接送らず、分岐を作ってスイッチ経由で合流させましょう。") if loc.dev_unpushed else
-                 "あなたの PC の作業フォルダ。幹線の変更はすべて GitHub に送ってあります。")
+                  "幹線には直接送らず、分岐を作ってスイッチ経由で合流させましょう。") if loc.dev_unpushed and loc.dev_branch == view.default_branch else
+                 "あなたの PC の作業フォルダ。")
+                + (f"分岐にまだ GitHub へ送っていないはんだ点が {loc.dev_unpushed} つあります。" if loc.dev_unpushed and loc.dev_branch != view.default_branch else "")
+                + f"現在の位置は {loc.dev_head[:7] or '不明'}（分岐: {loc.dev_branch or 'detached HEAD'}）です。"
+                + (f"GitHub の幹線より {view.dev_behind} コミット遅れています。" if view.dev_behind else
+                   "GitHub の幹線の先端と同じ位置です。" if view.dev_behind == 0 else
+                   "幹線の表示範囲には無い位置です。分岐のはんだ点も確認してください。")
                 + (f"まだコミットしていない変更が {loc.dev_uncommitted} つあります。" if loc.dev_uncommitted else "")
                 + stale_note(view),
         "actions": _fetch_act(view, wd),
@@ -225,11 +232,12 @@ def parts(view: RepoView) -> dict[str, dict]:
         }
     for b in view.branches:
         pr = view.pull_for(b.name)
+        merged = view.merged_for(b.name)
         n = branch_linked_issue(view, b.name)
         issue = view.issue(n) if n else None
         lb = view.local_branch(b.name)
         acts = []
-        if not pr:
+        if not pr and not merged:
             default_title = issue.title if issue else b.name
             default_body = f"Fixes #{issue.number}" if issue else ""
             acts.append(_act("create_pr", "スイッチを付ける（プルリクエスト作成）", r, head=b.name, fields=[
@@ -247,8 +255,9 @@ def parts(view: RepoView) -> dict[str, dict]:
         out[f"branch:{b.name}"] = {
             "title": ("錆びた分岐 " if rusty else "分岐 ") + b.name,
             "term": "ブランチ" + ("（放置）" if rusty else ""),
-            "body": (f"幹線から引き出した作業用の配線。ここで何度はんだ付け（コミット）しても、幹線と本番には影響しません。"
-                     f"幹線より {b.ahead} 進み、{b.behind} 遅れています。"
+            "body": ((f"スイッチ #{merged.number} で合流済みです。現在の GitHub の先端は取り込み済みで、履歴上の進みを新しい作業としては数えません。"
+                      if merged else
+                      f"幹線から引き出した作業用の配線。ここで何度はんだ付け（コミット）しても、幹線と本番には影響しません。幹線より {b.ahead} 進み、{b.behind} 遅れています。")
                      + (f"{b.idle_days} 日間はんだ付けされていません。" if rusty else "")
                      + (f"付箋 #{issue.number} が差し込まれています。" if issue else "")
                      + (f"作業台には、まだ GitHub に送っていないはんだ点が {lb.unpushed} つあります（点線）。" if lb and lb.unpushed else "")
@@ -306,6 +315,9 @@ def _cleanup_part(view: RepoView, wd: str) -> dict:
         names = "、".join(stale[:CLEANUP_SHOWN]) + ("…" if len(stale) > CLEANUP_SHOWN else "")
         body += (f"また、作業台にある GitHub のコピー（origin/…）に、GitHub にはもう無い古い記録が {len(stale)} 個あります（{names}）。"
                  "GitHub 側で分岐を撤去しても、手元の記録は自動では消えません。1つのコマンドでまとめて片付きます（手元の分岐やファイルは変わりません）。")
+    completed = [b for b in view.branches if view.completed_branch(b.name)]
+    if completed:
+        body += "GitHub にも合流済みの分岐が残っています: " + "、".join(b.name for b in completed) + "。撤去操作はブレーカーで確認します。"
     body += stale_note(view)
     acts: list[dict] = []
     for b in left[:CLEANUP_SHOWN]:
@@ -313,6 +325,8 @@ def _cleanup_part(view: RepoView, wd: str) -> dict:
         acts += _term(f"{b.name}（最終 {b.date:%Y-%m-%d}）を消す{notes}", delete_local(wd, b.name))
     if stale:
         acts += _term("古い GitHub のコピー（origin/…）をまとめて掃除する", prune_origin(wd))
+    for b in completed:
+        acts.append(_act("delete_branch", f"合流済みの分岐 {b.name} を GitHub から撤去する", view.name, danger=True, name=b.name))
     acts += _fetch_act(view, wd)
     return {
         "title": "作業台の片付け",

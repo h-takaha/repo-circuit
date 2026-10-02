@@ -184,7 +184,7 @@ RULES: list[Rule] = [
     ),
     Rule(
         "delete_unmerged", TRIP, ("delete_branch",),
-        lambda p, v: bool(v.branch(str(p.get("name")))) and v.branch(str(p.get("name"))).ahead > 0,
+        lambda p, v: bool(v.branch(str(p.get("name")))) and v.branch(str(p.get("name"))).ahead > 0 and not v.merged_for(str(p.get("name"))),
         "合流していないはんだ点がある分岐は撤去できません",
         "この分岐には、幹線にまだ入っていないはんだ点（コミット）があります。撤去するとこの作業が GitHub から消え、取り戻すのが難しくなります。",
         ("はんだ点をクリックして、何を変えたか確認する",
@@ -192,12 +192,18 @@ RULES: list[Rule] = [
          "本当に不要なら、理由を付箋に書いて残してから、ターミナルで明示的に削除する（このアプリでは消せません）"),
         "git log origin/main..origin/{name}",
     ),
+    Rule(
+        "delete_local_work", TRIP, ("delete_branch",), lambda p, v: v.local_work(str(p.get("name"))),
+        "作業台に新しい変更がある分岐は撤去できません",
+        "合流後も、作業台に未送電のはんだ点や未コミットの変更があります。先にその作業を確認してください。",
+        ("作業台の変更をコミットし、GitHub へ送って新しいスイッチ経由で合流する",),
+    ),
     # ---- スイッチを付ける ----
     Rule(
         "pr_no_diff", TRIP, ("create_pr",),
-        lambda p, v: bool(v.branch(str(p.get("head")))) and v.branch(str(p.get("head"))).ahead == 0,
-        "まだ何もはんだ付けしていない分岐です",
-        "幹線との違いが無いので、取り込むものがありません。",
+        lambda p, v: bool(v.branch(str(p.get("head")))) and (v.branch(str(p.get("head"))).ahead == 0 or v.merged_for(str(p.get("head"))) is not None),
+        "取り込む新しいはんだ点がありません",
+        "新しいはんだ点が無いか、現在の先端はすでに合流済みなので、取り込むものがありません。",
         ("作業台でこの分岐に切り替えて直し、コミットして GitHub に送る",),
         "git switch {head}",
     ),

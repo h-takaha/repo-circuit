@@ -187,3 +187,17 @@ def test_create_issue_creates_missing_labels():
     src = GitHubSource("t", "h-takaha")
     res = asyncio.run(src.create_issue("tool", "t", "b", ["feedback", "bug", "p1"]))
     assert res["number"] == 7 and made.call_count == 3 and issue.called
+
+
+@respx.mock
+def test_branch_sha_comes_from_branch_tip_even_when_compare_is_behind():
+    c = {'sha': 'base', 'commit': {'message': 'base'}}
+    respx.get(API).respond(200, json={'default_branch': 'main'})
+    respx.get(f'{API}/commits').respond(200, json=[{**c, 'sha': 'main-tip'}])
+    respx.get(f'{API}/branches').respond(200, json=[{'name': 'main'}, {'name': 'work', 'commit': {'sha': 'real-tip'}}])
+    respx.get(f'{API}/pulls').respond(200, json=[])
+    respx.get(f'{API}/issues').respond(200, json=[])
+    respx.get(f'{API}/compare/main...work').respond(200, json={
+        'ahead_by': 0, 'behind_by': 2, 'commits': [], 'merge_base_commit': c})
+    v = asyncio.run(GitHubSource('t', 'h-takaha').repo_view('tool'))
+    assert v.branches[0].sha == 'real-tip'

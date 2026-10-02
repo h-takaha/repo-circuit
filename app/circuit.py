@@ -58,10 +58,12 @@ def layout(view: RepoView) -> Scene:
     local_only = [
         Branch(lb.name, lb.head, lb.unpushed, 0, lb.commits, lb.base, lb.last_date)
         for lb in view.local.branches
-        if not lb.on_github and lb.unpushed and view.branch(lb.name) is None
+        if not lb.on_github and (lb.unpushed or lb.name == view.local.dev_branch)
+        and view.branch(lb.name) is None and not view.completed_branch(lb.name)
     ]
     local_names = {b.name for b in local_only}
-    branches = sorted(view.branches + local_only, key=lambda b: index.get(b.merge_base, -1))
+    branches = sorted([b for b in view.branches if not view.completed_branch(b.name)] + local_only,
+                      key=lambda b: index.get(b.merge_base, -1))
     hidden = max(0, len(branches) - MAX_LANES)
     branches = branches[:MAX_LANES]
     lanes = len(branches)
@@ -128,7 +130,7 @@ def _branch(s: Scene, view: RepoView, b: Branch, jx: float, y: float, rx: float 
 
     # GitHub にある分岐でも、作業台で足してまだ送っていないはんだ点は点線で右に続ける
     unsent = lb.commits[-3:] if lb and not local_only else []
-    kept = b.commits[-(MAX_DOTS - len(unsent)):]
+    kept = [] if view.merged_for(b.name) else b.commits[-(MAX_DOTS - len(unsent)):]
     base_cls = "commit-dev" if local_only else ("commit-rust" if rusty else "commit")
     dots = [(c, base_cls) for c in kept] + [(c, "commit-dev") for c in unsent]
     span = max(pivot - 24 - start, 1)
@@ -136,15 +138,16 @@ def _branch(s: Scene, view: RepoView, b: Branch, jx: float, y: float, rx: float 
         x = start + span * (i + 0.5) / len(dots)
         s.dots.append({"x": x, "y": y, "r": 6, "cls": cls})
         s.hits.append({"x": x - 12, "y": y - 12, "w": 24, "h": 24, "part": f"commit:{c.sha}", "label": f"はんだ点 {c.headline}"})
-    hidden = (b.ahead if local_only else len(b.commits)) - len(kept)
+    hidden = 0 if view.merged_for(b.name) else (b.ahead if local_only else len(b.commits)) - len(kept)
     if hidden > 0:
         s.texts.append({"x": start, "y": y - 14, "t": f"+{hidden}", "cls": "lblm"})
     if local_only:
         # 下の段の検査ランプとぶつからないよう、ラベルは名前だけにし、「作業台のみ」は配線の上に書く
         label = b.name
-        s.texts.append({"x": start + (30 if hidden > 0 else 0), "y": y - 14, "t": f"作業台のみ · 未送電 {b.ahead}", "cls": "lblm devt"})
+        work = f"未コミット {view.local.dev_uncommitted}" if b.name == view.local.dev_branch and view.local.dev_uncommitted else f"未送電 {b.ahead}"
+        s.texts.append({"x": start + (30 if hidden > 0 else 0), "y": y - 14, "t": f"作業台のみ · {work}", "cls": "lblm devt"})
     else:
-        label = b.name + (f" · {b.idle_days}日放置" if rusty else "") + (f" · 未送電 {lb.unpushed}" if lb and lb.unpushed else "")
+        label = b.name + (" · 合流済み・新しい作業" if view.merged_for(b.name) else f" · {b.idle_days}日放置" if rusty else "") + (f" · 未送電 {lb.unpushed}" if lb and lb.unpushed else "")
     # スイッチがある分岐は「スイッチ #N」の手前まで、無い分岐は図の右端までに収める
     room = (pivot - 22 if pr and rx else WIDTH - 10) - (jx + 22)
     label = _fit(label, room)
@@ -202,7 +205,7 @@ def _markers(s: Scene, view: RepoView, main_x: dict[str, float]) -> None:
             s.texts.append({"x": MAIN_LEFT, "y": y + 30, "t": "本番: この表示より古い版", "cls": "lblm runt"})
             s.hits.append({"x": MAIN_LEFT - 4, "y": y + 16, "w": 180, "h": 20, "part": "run", "label": "本番マーカー"})
     # 幹線の上の「作業台」旗は、作業台で幹線そのものにいるときだけ（分岐の未送電は分岐の配線に点線で描く）
-    if view.local.dev_exists and view.local.dev_branch == view.default_branch and view.local.dev_unpushed > 0 and main:
+    if view.local.dev_exists and view.local.dev_branch == view.default_branch and view.local.dev_unpushed > 0 and view.dev_behind is None and main:
         lx = main_x[main[-1].sha]
         k = min(view.local.dev_unpushed, 3)
         end = lx + 40 + 44 * k
@@ -212,3 +215,20 @@ def _markers(s: Scene, view: RepoView, main_x: dict[str, float]) -> None:
         s.paths.append({"d": f"M{end + 4:.0f} {y - 56}H{end + 16:.0f}L{end + 10:.0f} {y - 46}Z", "cls": "mark-dev"})
         s.texts.append({"x": end + 22, "y": y - 46, "t": f"作業台 · 未送電 {view.local.dev_unpushed}", "cls": "lblm devt"})
         s.hits.append({"x": lx + 26, "y": y - 72, "w": end - lx + 40, "h": 40, "part": "dev", "label": "作業台マーカー"})
+    elif view.local.dev_exists and view.local.dev_head:
+        # 本番旗は上、作業台旗は下。同じ HEAD でも文字・クリック領域が重ならない。
+        x = main_x.get(view.local.dev_head)
+        if x is None:
+            for h in s.hits:
+                if h['part'] == f"commit:{view.local.dev_head}":
+                    x, y = h['x'] + 12, h['y'] + 12
+                    break
+        if x is None:
+            x, y = MAIN_LEFT, s.height - 70
+            label = f"作業台 · 表示範囲外 {view.local.dev_head[:7]}"
+        else:
+            lag = view.dev_behind
+            label = f"作業台 · {lag} 遅れ" if lag else "作業台 · 幹線の先端" if lag == 0 else "作業台"
+        s.paths.append({"d": f"M{x - 7:.0f} {y + 18}H{x + 7:.0f}L{x:.0f} {y + 6}Z", "cls": "mark-dev"})
+        s.texts.append({"x": x, "y": y + 46, "t": label, "cls": "lblm devt"})
+        s.hits.append({"x": x - 50, "y": y + 6, "w": 100, "h": 48, "part": "dev", "label": "作業台マーカー"})
