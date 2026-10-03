@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ view.name }} の回路図 · repo-circuit{% endblock %}
 {% block content %}
+{% include "_repo_header.html" %}
 <div class="cwrap">
   <aside class="ctray">
     {% if view.local.dev_exists %}
@@ -9,9 +10,10 @@
       {% set tidy = view.local.merged or view.local.stale_origin or completed %}
     <button type="button" class="chipbtn {{ 'unwired' if tidy else 'done' }}" data-part="cleanup">
         <span class="mono" style="font-size:12px;font-weight:600">作業台の片付け · {{ view.local.merged|length }}本{% if completed %} · GitHub 合流済み {{ completed|length }}本{% endif %}{% if view.local.stale_origin %} · 古い記録 {{ view.local.stale_origin|length }}個{% endif %}</span>
-      <span style="font-size:14px;font-weight:500;line-height:1.45">{{ '幹線に入りきった分岐や、GitHub にもう無い古い記録が残っています' if tidy else '片付けるものはありません' }}</span>
+      <span style="font-size:14px;font-weight:500;line-height:1.45">{{ '幹線に入りきった分岐や、GitHub にもう無い古い記録が残っています' if tidy else '片付け候補の分岐・追跡記録はありません' }}</span>
     </button>
     {% endif %}
+    <a class="cap" href="/repo/{{ repo_name|urlencode }}/worktrees">作業場所と残っているファイルを確認 →</a>
     <div class="kicker">部品トレイ · {{ view.name }} の付箋</div>
     {% for c in chips %}
     <button type="button" class="chipbtn {{ c.state }}" data-part="{{ c.part }}">
@@ -26,11 +28,6 @@
 
   <section class="cmain">
     <div class="chead">
-      <a href="/" style="font-size:13px">配電盤</a><span class="cap">›</span>
-      <select id="repo-switch" aria-label="回路を切り替える">
-        {% for n in names %}<option value="{{ n }}" {{ 'selected' if n == view.name }}>{{ n }}</option>{% endfor %}
-      </select>
-      {% if view.url %}<a href="{{ view.url }}" target="_blank" rel="noopener" style="font-size:13px">GitHub で見る ↗</a>{% endif %}
       <div class="breaker" id="breaker">
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 12V4H13V12Z M8 4V8" fill="none" stroke="currentColor" stroke-width="2"></path></svg>
         <span>ブレーカー: <span id="breaker-text">正常</span></span>
@@ -93,4 +90,4 @@
 </div>
 <script type="application/json" id="parts-data">{{ parts|tojson }}</script>
 {% endblock %}
-{% block scripts %}<script src="{{ asset('circuit.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ asset('repo.js') }}"></script><script src="{{ asset('circuit.js') }}"></script>{% endblock %}

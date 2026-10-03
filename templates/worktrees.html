@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ repo_name }} の作業場所 · repo-circuit{% endblock %}
+{% block content %}
+{% include "_repo_header.html" %}
+{% set read_labels = {'complete':'取得済み', 'partial':'一部取得', 'unknown':'未取得'} %}
+<section class="card wt-intro">
+  <div class="kicker">作業場所（worktree） · 読み取り専用</div>
+  <h1>{{ repo_name }} の作業場所</h1>
+  <p class="lead">幹線への取り込みと、手元に残るファイルを別々に確認します。取り込みが確認済みでも、必要なファイルや使用状況の確認は必要です。</p>
+  <p class="wt-total">{% if not snapshot.rows and snapshot.state != 'complete' %}登録件数は未取得{% else %}登録{{ snapshot.rows|length }}件：主作業場所{{ snapshot.rows|selectattr('is_primary')|list|length }}件・追加{{ snapshot.rows|rejectattr('is_primary')|list|length }}件{% endif %} <span class="term">{{ read_labels[snapshot.state] }}</span></p>
+  <p class="cap">観測時刻 <time datetime="{{ snapshot.observed_at.isoformat() }}">{{ snapshot.observed_at.isoformat(timespec='seconds') }}</time><br>読み取り元 <span class="mono">{{ snapshot.source_path }}</span></p>
+  {% if snapshot.notes %}<ul class="wt-notes">{% for note in snapshot.notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+</section>
+<div class="wt-grid">
+{% for row in snapshot.rows %}
+  <article class="card wt-card" aria-labelledby="wt-title-{{ loop.index }}">
+    <div class="wt-card-top"><span class="kicker">{{ '主作業場所' if row.is_primary else '追加の作業場所' }}</span><span class="wt-state {{ row.integration.state }}">{{ row.integration.label }}</span></div>
+    <h2 id="wt-title-{{ loop.index }}" class="mono wt-path">{{ row.path }}</h2>
+    <dl class="wt-facts">
+      <div><dt>分岐</dt><dd class="mono">{{ '分岐から離れた状態（detached）' if row.detached else (row.branch or '未取得') }}</dd></div>
+      <div><dt>実際の位置（HEAD）</dt><dd class="mono">{{ row.head_sha[:12] if row.head_sha else '未取得' }}</dd></div>
+      <div><dt>所在</dt><dd>{{ {'available':'確認済み', 'missing':'フォルダが見つかりません', 'unreadable':'読み取り不可', 'replaced':'別のリポジトリに置き換わっています'}[row.availability] }}</dd></div>
+      <div><dt>保護（locked）</dt><dd>{{ 'あり' if row.locked else 'なし' }}{% if row.locked_reason %} · {{ row.locked_reason }}{% endif %}</dd></div>
+      <div><dt>登録の整理対象（prunable）</dt><dd>{{ '該当' if row.prunable else '該当なし' }}{% if row.prunable_reason %} · {{ row.prunable_reason }}{% endif %}</dd></div>
+      <div><dt>管理元候補</dt><dd>{{ row.manager_candidate or '不明' }}{% if row.manager_reason %}<span class="cap">（推定：{{ row.manager_reason }}）</span>{% endif %}</dd></div>
+    </dl>
+    <div class="wt-files" aria-label="残っているファイルの要約パス件数">
+      {% for key, label in [('tracked','追跡中の変更'), ('untracked','未追跡'), ('ignored','除外対象')] %}
+      <div><span class="cap">{{ label }}</span><strong>{{ row.files[key] if row.files[key] is not none else '未取得' }}{% if row.files[key] is not none %}<small> 件</small>{% endif %}</strong></div>
+      {% endfor %}
+    </div>
+    <p class="cap">ファイル取得：{{ read_labels[row.files.state] }}。要約パス件数です。フォルダは1件として数え、内部を再帰集計しません。</p>
+    {% if row.guidance %}<ul class="wt-notes">{% for note in row.guidance %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+    {% if row.notes %}<ul class="wt-notes">{% for note in row.notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+    <details class="wt-details">
+      <summary>根拠・残存パス・整理前の確認事項</summary>
+      <div class="wt-detail-body">
+        <h3>取り込みの根拠</h3>
+        <dl class="wt-facts">
+          <div><dt>照合した実HEAD</dt><dd class="mono">{{ row.integration.head_sha or '未取得' }}</dd></div>
+          <div><dt>比較先</dt><dd class="mono">{{ row.integration.base_ref or '未取得' }}<br>{{ row.integration.base_sha or '未取得' }}</dd></div>
+          <div><dt>証拠の取得元</dt><dd>{{ row.integration.source }}</dd></div>
+          <div><dt>証拠の鮮度</dt><dd>{{ {'current':'今回取得', 'cached':'手元の記録（未更新）', 'stale':'古い記録', 'unknown':'不明', 'demo':'デモデータ'}[row.integration.freshness] }}</dd></div>
+          {% if row.integration.pull %}{% set pr = row.integration.pull %}
+          <div><dt>合流記録</dt><dd>{% if pr.url %}<a href="{{ pr.url }}" target="_blank" rel="noopener">スイッチ（PR）#{{ pr.number }} ↗</a>{% else %}スイッチ（PR）#{{ pr.number }}{% endif %}</dd></div>
+          <div><dt>PR の head / base / merge</dt><dd class="mono">{{ pr.head_sha or '未取得' }}<br>{{ pr.base or '未取得' }} · {{ pr.base_sha or '未取得' }}<br>{{ pr.merge_commit_sha or '未取得' }}</dd></div>
+          {% endif %}
+        </dl>
+        {% if row.integration.notes %}<ul class="wt-notes">{% for note in row.integration.notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+        <h3>残存パスの例（各分類20件まで）</h3>
+        {% for key, label in [('tracked','追跡中の変更'), ('untracked','未追跡'), ('ignored','除外対象')] %}
+        <div class="wt-samples"><h4>{{ label }}</h4>
+          {% if row.files[key + '_samples'] %}<ul>{% for path in row.files[key + '_samples'] %}<li class="mono">{{ path }}</li>{% endfor %}</ul>
+          {% else %}<p class="cap">{{ '該当なし' if row.files[key] == 0 else 'パス例は未取得' }}</p>{% endif %}
+        </div>
+        {% endfor %}
+        {% if row.files.notes %}<ul class="wt-notes">{% for note in row.files.notes %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+        <h3>整理前の確認事項</h3>
+        <ol class="wt-checklist">
+          <li>この作業場所を使う作業やセッションが終了しているか確認する。</li>
+          <li>必要なファイルを退避し、退避先から復元できるか確認する。除外対象の設定や環境も確認する。</li>
+          <li>作成した管理元を確認し、その管理元で作業場所を整理する。</li>
+          <li>必要なら、残った分岐を別途確認して整理する。</li>
+        </ol>
+        <p class="cap">登録の整理（prune）とフォルダの削除は別の操作です。登録や checkout の存在だけでは、使用中・使用終了・削除可能とは判断できません。この画面は削除・退避・整理コマンドのコピーを行いません。</p>
+        <a href="/repo/{{ repo_name|urlencode }}">このツールの回路へ →</a>
+      </div>
+    </details>
+  </article>
+{% else %}
+  <p class="card wt-intro">{{ '登録された作業場所はありません。' if snapshot.state == 'complete' else '登録一覧を取得できていません。取得上の注記を確認してください。' }}</p>
+{% endfor %}
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ asset('repo.js') }}"></script>{% endblock %}

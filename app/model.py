@@ -66,6 +66,7 @@ class PullRequest:
     mergeable_state: str  # clean / dirty / blocked / unknown ...
     url: str = ""
     merge_commit_sha: str = ""  # 合流済みなら幹線にできたはんだ点
+    base_sha: str = ""  # GitHubが返したPRのbase位置。未取得は空。
 
 
 @dataclass

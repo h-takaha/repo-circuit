@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 from .config import Settings
 from .localgit import load_autodeploy, read_local_state
 from .model import RepoView
+from .worktrees import RepoEvidence, read_worktrees, repo_path
 
 
 def mark_origin_lag(v: RepoView) -> None:
@@ -50,3 +52,24 @@ class Service:
         names = await self.source.repo_names()
         results = await asyncio.gather(*(self.view(n, detail=False) for n in names), return_exceptions=True)
         return [r for r in results if isinstance(r, RepoView)]
+
+    async def worktrees(self, name: str, deadline: float | None = None):
+        """このGETだけが残存ファイルを走査する。GitHub障害でもローカルは読む。"""
+        if self.settings.demo:
+            return self.source.worktree_snapshot(name), (await self.source.repo_view(name)).url
+        repo_path(self.settings.lab_git_dir, name)  # 外部呼出しより先に入力を検証
+        deadline = deadline if deadline is not None else time.monotonic() + 15
+        evidence = RepoEvidence()
+        try:
+            if hasattr(self.source, "worktree_evidence"):
+                evidence = await asyncio.wait_for(self.source.worktree_evidence(name), timeout=min(3, max(.001, deadline-time.monotonic())))
+            else:
+                v = await asyncio.wait_for(self.source.repo_view(name), timeout=min(3, max(.001, deadline-time.monotonic())))
+                evidence = RepoEvidence(v.default_branch, v.head_sha, v.closed_pulls,
+                                        "GitHub（cacheを含む）", "cached", v.url)
+        except Exception:
+            if hasattr(self.source, "cached_worktree_evidence"):
+                evidence = self.source.cached_worktree_evidence(name)
+            evidence.notes.append("GitHubを取得できませんでした。ローカル登録と利用可能な既存証拠を表示します。")
+        snapshot = await asyncio.to_thread(read_worktrees, self.settings.lab_git_dir, name, evidence, deadline)
+        return snapshot, evidence.repo_url

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from urllib.parse import quote
 from datetime import datetime
 from typing import Any
 
@@ -163,6 +164,36 @@ class GitHubSource:
             url=meta.get("html_url", ""),
         )
 
+    async def worktree_evidence(self, name: str):
+        """worktree画面に必要な証拠のみ。回路の分岐表示上限に依存しない。"""
+        from .worktrees import RepoEvidence
+
+        r = self._r(name)
+        meta = await self._get(r)
+        default = meta.get("default_branch")
+        closed, branch = await asyncio.gather(
+            self._get(f"{r}/pulls", state="closed", per_page=30),
+            self._get(f"{r}/branches/{quote(default, safe='')}") if default else asyncio.sleep(0, result={}),
+        )
+        return RepoEvidence(default_branch=default,
+            head_sha=branch.get("commit", {}).get("sha"),
+            pulls=[self._pull_basic(p, "none", "unknown") for p in closed],
+            source=f"GitHub（既存の最大{self.ttl:g}秒キャッシュを含む）", freshness="cached",
+            repo_url=meta.get("html_url"))
+
+    def cached_worktree_evidence(self, name: str):
+        """障害時は既存cacheのみ。再送・fetch・disk保存はしない。"""
+        from .worktrees import RepoEvidence
+
+        r = self._r(name)
+        meta = self._cache.get(r + "?", (0, {}))[1]
+        default = meta.get("default_branch")
+        closed = self._cache.get(f"{r}/pulls?per_page=30&state=closed", (0, []))[1]
+        branch = self._cache.get(f"{r}/branches/{quote(default, safe='')}?", (0, {}))[1] if default else {}
+        return RepoEvidence(default_branch=default, head_sha=branch.get("commit", {}).get("sha"),
+            pulls=[self._pull_basic(p, "none", "unknown") for p in closed],
+            source="GitHubの既存cache（障害時）", freshness="stale", repo_url=meta.get("html_url"))
+
     async def _branch(self, r: str, default: str, name: str) -> Branch:
         cmp = await self._get(f"{r}/compare/{default}...{name}")
         commits = [_commit(c) for c in cmp.get("commits", [])]
@@ -239,6 +270,7 @@ class GitHubSource:
             mergeable_state=mergeable_state,
             url=p.get("html_url", ""),
             merge_commit_sha=(p.get("merge_commit_sha") or "") if p.get("merged_at") else "",
+            base_sha=p.get("base", {}).get("sha") or "",
         )
 
     # ---- 書き込み（actions.py からだけ呼ぶ）----

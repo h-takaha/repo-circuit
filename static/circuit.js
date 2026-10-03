@@ -225,8 +225,6 @@
   }
 
   document.querySelectorAll('[data-part]').forEach((b) => b.addEventListener('click', () => show(b.dataset.part)));
-  const sw = document.getElementById('repo-switch');
-  if (sw) sw.addEventListener('change', () => { location.href = '/repo/' + encodeURIComponent(sw.value); });
 
   const q = new URLSearchParams(location.search);
   if (q.get('msg')) {

@@ -177,6 +177,37 @@ svg .tripping{animation:blink .5s steps(2) infinite;stroke:var(--red)!important}
 @keyframes flow{to{stroke-dashoffset:-22}}
 @keyframes blink{50%{opacity:.25}}
 
+/* ---- 作業場所 ---- */
+.repo-header{display:flex;flex-direction:column;gap:12px;min-width:0}
+.repo-header .chead{font-size:13px;min-width:0}
+.repo-header select{max-width:100%;min-width:0}
+.repo-tabs{border-bottom:1px solid var(--line);padding-bottom:10px}
+.wt-intro{padding:20px;display:flex;flex-direction:column;gap:10px;min-width:0;overflow-wrap:anywhere}
+.wt-intro p{margin:0}.wt-total{font-weight:700;line-height:1.8}
+.wt-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.wt-card{padding:20px;display:flex;flex-direction:column;gap:14px;min-width:0;overflow-wrap:anywhere}
+.wt-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.wt-path{font-size:17px;line-height:1.6;min-width:0;overflow-wrap:anywhere}
+.wt-state{font-size:12px;font-weight:700;padding:5px 8px;border-radius:6px;background:var(--soft);color:var(--muted)}
+.wt-state.integrated{background:var(--green-bg);color:var(--green-ink)}
+.wt-state.receipt_only{background:var(--yellow-bg);color:var(--yellow-ink)}
+.wt-state.unconfirmed{background:var(--blue-bg);color:var(--blue-ink)}
+.wt-facts{margin:0;display:grid;gap:8px;font-size:13px;line-height:1.55}
+.wt-facts>div{display:grid;grid-template-columns:minmax(0,150px) minmax(0,1fr);gap:10px}
+.wt-facts dt{color:var(--muted)}.wt-facts dd{margin:0;min-width:0}
+.wt-files{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.wt-files>div{background:var(--soft);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.wt-files strong{font-size:20px}.wt-files small{font-size:12px;font-weight:400}
+.wt-card p{margin:0;line-height:1.65}
+.wt-notes,.wt-checklist{margin:0;padding-left:22px;font-size:13px;line-height:1.7}
+.wt-details{border-top:1px solid var(--line);margin-top:auto;padding-top:6px;min-width:0}
+.wt-details summary{display:list-item;list-style-position:inside;min-height:44px;padding:12px 0;color:var(--ink);font-weight:700}
+.wt-detail-body{display:flex;flex-direction:column;gap:12px;padding-top:8px;font-size:13px}
+.wt-detail-body h3{font-size:14px;margin:8px 0 0}.wt-detail-body h4{font-size:13px;margin:0 0 6px}
+.wt-samples ul{margin:0;padding-left:20px;line-height:1.7}
+@media (max-width:900px){.wt-grid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:450px){.wt-card,.wt-intro{padding:14px}.wt-facts>div{grid-template-columns:minmax(0,1fr);gap:2px}.repo-tabs .tab{padding:0 10px;font-size:14px}.wt-files>div{padding:8px}.wt-files strong{font-size:17px}}
+
 /* ---- 部品トレイ ---- */
 .twrap{display:flex;gap:20px;align-items:flex-start}
 .tcols{flex-grow:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;min-width:0}

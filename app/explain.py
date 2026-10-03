@@ -305,7 +305,7 @@ def _cleanup_part(view: RepoView, wd: str) -> dict:
     left = view.local.merged
     stale = view.local.stale_origin
     if not left:
-        body = "幹線に入りきっているのに、作業台に残っている分岐はありません。"
+        body = "この一覧で片付け候補になっている手元の分岐はありません。"
     else:
         body = (f"幹線に入りきっているのに、作業台に残っている分岐が {len(left)} 本あります。中身はすべて幹線にあるので、消しても作業は失われません。"
                 "今いる分岐と、別の作業場所（worktree）で使っている分岐は含めていません。"
@@ -320,6 +320,7 @@ def _cleanup_part(view: RepoView, wd: str) -> dict:
     if completed:
         body += "GitHub にも合流済みの分岐が残っています: " + "、".join(b.name for b in completed) + "。撤去操作はブレーカーで確認します。"
     body += stale_note(view)
+    body += "この部品の対象は分岐・GitHubの追跡記録です。残っているフォルダとファイルは作業場所（worktree）タブで別に確認してください。"
     acts: list[dict] = []
     for b in left[:CLEANUP_SHOWN]:
         notes = ("・GitHub にも同名の分岐が残っています" if b.on_github else "") + ("・作ったばかりで、まだ何もはんだ付けしていないかもしれません" if b.fresh else "")

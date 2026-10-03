@@ -49,6 +49,14 @@
   </span>
 </section>
 
+<section class="card wt-intro">
+  <h2>作業場所（worktree） — 手元に残る作業の置き場</h2>
+  <p class="ds">ツールの「作業場所（worktree）」タブは、主作業場所と追加の作業場所を全件表示します。回路の分岐表示上限とは独立しています。「作業台の片付け」が扱う分岐・追跡記録とは別に、実際の場所と残っているファイルを確認できます。</p>
+  <p class="ds">取り込みは「確認済み」「合流記録あり・到達未確認」「取り込み未確認」「判定不明」の4状態です。手元の既定分岐の記録と実HEAD、合流記録を照合します。fetch は行わず、根拠と鮮度を詳細に表示します。確認済みでもファイルの退避や使用終了の確認は必要です。</p>
+  <p class="ds">ファイルは追跡中の変更・未追跡・除外対象の要約パス件数です。フォルダは1件、0は取得できた空結果、「未取得」は不明です。管理元はパスからの候補であり、使用状況を断定しません。</p>
+  <p class="ds">整理は、使用終了の確認 → 必要ファイルの退避と復元確認 → 管理元で作業場所を整理 → 必要なら残った分岐を整理、の順です。登録の整理（prune）とフォルダ削除は別操作です。この画面は一覧と案内だけを提供します。</p>
+</section>
+
 <div class="legend">
   <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="bus" d="M8 24H88"></path></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">幹線</span><span class="gh">main / 本線</span></div><div class="ds">全員の土台。右端が本番につながる。直接はんだ付けはしない。</div></div></div>
   <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="bus" d="M8 12H88"></path><path class="w" d="M20 12V36H76V12"></path></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">分岐配線</span><span class="gh">ブランチ</span></div><div class="ds">幹線から引き出した作業用の配線。何をしても本番には影響しない。</div></div></div>

@@ -1,0 +1,14 @@
+<div class="repo-header">
+  <div class="chead">
+    <a href="/">配電盤</a><span class="cap" aria-hidden="true">›</span>
+    <label class="cap" for="repo-switch">ツール</label>
+    <select id="repo-switch" data-repo-tab="{{ repo_tab }}">
+      {% for n in names %}<option value="{{ n }}" {{ 'selected' if n == repo_name }}>{{ n }}</option>{% endfor %}
+    </select>
+    {% if repo_url %}<a href="{{ repo_url }}" target="_blank" rel="noopener">GitHub で見る ↗</a>{% endif %}
+  </div>
+  <nav class="tabs repo-tabs" aria-label="ツールの表示">
+    <a class="tab {{ 'on' if repo_tab == 'circuit' }}" href="/repo/{{ repo_name|urlencode }}"{% if repo_tab == 'circuit' %} aria-current="page"{% endif %}>回路</a>
+    <a class="tab {{ 'on' if repo_tab == 'worktrees' }}" href="/repo/{{ repo_name|urlencode }}/worktrees"{% if repo_tab == 'worktrees' %} aria-current="page"{% endif %}>作業場所（worktree）</a>
+  </nav>
+</div>
