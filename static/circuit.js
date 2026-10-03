@@ -7,6 +7,7 @@
   const breaker = document.getElementById('breaker');
   const breakerText = document.getElementById('breaker-text');
   let current = null;
+  let checkSeq = 0;
 
   function setPanel(...nodes) {
     // null / false は捨てる（replaceChildren に渡すと文字列 "null" として画面に出てしまう）
@@ -66,6 +67,7 @@
   }
 
   function show(partId, flash) {
+    checkSeq++;
     const p = parts[partId];
     if (!p) return;
     current = partId;
@@ -131,18 +133,24 @@
   }
 
   async function check(a, params, mode) {
-    const res = await post('/actions/check', { action: a.action, params });
-    if (res.verdicts === undefined) return showError(res.message || res.detail);
+    const seq = ++checkSeq;
+    // 確認対象は、部品に表示した先端を保持する。応答の最新SHAへ置き換えない。
+    const confirmedParams = Object.freeze({ ...params });
+    const res = await post('/actions/check', { action: a.action, params: confirmedParams });
+    if (seq !== checkSeq) return;
+    if (res.ok === false || res.verdicts === undefined) return showError(res.message || res.detail);
     if (res.tripped) return showTrip(res);
-    showConfirm(a, params, res, mode);
+    showConfirm(a, confirmedParams, res, mode);
   }
 
   function showError(message) {
+    checkSeq++;
     setPanel(el('div', { class: 'flash ng' }, message || 'エラーが起きました'),
       el('button', { type: 'button', class: 'btn ghost', onclick: () => show(current) }, '戻る'));
   }
 
   function showTrip(res) {
+    checkSeq++;
     setBreaker('trip');
     const hit = document.querySelector('.hit.sel');
     if (res.action === 'merge_pr' && res.cmd) {
@@ -195,7 +203,7 @@
     btn.disabled = true;
     const res = await post('/actions/run', { action: a.action, params, ack });
     if (res.tripped) return showTrip(res);
-    if (!res.ok) return showError(res.message);
+    if (!res.ok) return showError(res.message || res.detail);
     const done = () => {
       const q = new URLSearchParams({ msg: res.message, sel: current || '' });
       if (res.url) q.set('url', res.url);

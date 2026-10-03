@@ -11,6 +11,10 @@ def view(name="event-calendar"):
 
 
 def ids(action, params, v):
+    if action == "merge_pr":
+        pr = next((p for p in v.pulls if p.number == params.get("number")), None)
+        if pr:
+            params = {"expected_head_sha": pr.head_sha, "expected_base": pr.base, **params}
     return {x.id: x.level for x in evaluate(action, {"repo": v.name, **params}, v)}
 
 
@@ -119,3 +123,22 @@ def test_close_issue_without_fix_warns_but_with_fix_passes():
     v = view()
     assert ids("close_issue", {"number": 15}, v)["close_without_fix"] == WARN
     assert "close_without_fix" not in ids("close_issue", {"number": 10}, v)
+
+def test_merge_head_guard_trips_and_same_head_does_not_trip():
+    v = view()
+    pr = v.pulls[0]
+    assert ids("merge_pr", {"number": pr.number, "expected_head_sha": "e" * 40}, v)["merge_head_changed"] == TRIP
+    assert "merge_head_changed" not in ids("merge_pr", {"number": pr.number, "expected_head_sha": pr.head_sha}, v)
+
+
+def test_merge_base_guard_trips_and_same_base_does_not_trip():
+    v = view()
+    pr = v.pulls[0]
+    assert ids("merge_pr", {"number": pr.number, "expected_base": "other"}, v)["merge_base_changed"] == TRIP
+    assert "merge_base_changed" not in ids("merge_pr", {"number": pr.number, "expected_base": pr.base}, v)
+
+
+def test_merge_missing_guard_trips_and_open_pr_does_not_trip():
+    v = view()
+    assert ids("merge_pr", {"number": 999}, v)["merge_missing"] == TRIP
+    assert "merge_missing" not in ids("merge_pr", {"number": v.pulls[0].number}, v)

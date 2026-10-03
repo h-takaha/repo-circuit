@@ -143,3 +143,11 @@ def test_create_pr_button_stays_and_the_breaker_teaches_when_branch_has_nothing_
     assert "create_pr" in [a["action"] for a in part["actions"]]
     got = {x.id: x for x in evaluate("create_pr", {"repo": v.name, "head": b.name, "title": "t", "body": "Fixes #1"}, v)}
     assert got["pr_no_diff"].level == TRIP and got["pr_no_diff"].steps
+
+def test_merge_button_carries_the_displayed_head_and_base():
+    v = view()
+    pr = v.pulls[0]
+    action = next(a for a in parts(v)[f"pr:{pr.number}"]["actions"] if a["action"] == "merge_pr")
+    assert action["params"]["expected_head_sha"] == pr.head_sha
+    assert action["params"]["expected_base"] == pr.base
+    assert "--match-head-commit " + pr.head_sha in action["cmd"]

@@ -97,6 +97,11 @@ class GitHubSource:
         self._cache[key] = (time.monotonic(), data)
         return data
 
+    async def _read(self, path: str, *, fresh: bool = False, **params) -> Any:
+        if fresh:
+            return await self._req("GET", path, params=params)
+        return await self._get(path, **params)
+
     def invalidate(self, repo: str | None = None) -> None:
         if repo is None:
             self._cache.clear()
@@ -173,20 +178,34 @@ class GitHubSource:
             last_date=last,
         )
 
-    async def _pull(self, r: str, p: dict) -> PullRequest:
-        detail = await self._get(f"{r}/pulls/{p['number']}")
+    async def pull_for_merge(self, repo: str, number: int) -> PullRequest | None:
+        """合流の検証用。PR詳細と、その先端の検査結果をキャッシュせず読む。"""
+        r = self._r(repo)
         try:
-            checks = await self._get(f"{r}/commits/{detail['head']['sha']}/check-runs", per_page=100)
+            detail = await self._read(f"{r}/pulls/{number}", fresh=True)
+        except GitHubError as e:
+            if e.status == 404:
+                return None
+            raise
+        return await self._pull(r, {"number": number}, fresh=True, detail=detail)
+
+    async def _pull(self, r: str, p: dict, *, fresh: bool = False, detail: dict | None = None) -> PullRequest:
+        if detail is None:
+            detail = await self._read(f"{r}/pulls/{p['number']}", fresh=fresh)
+        if detail["state"] != "open" or detail.get("merged_at"):
+            return self._pull_basic(detail, "none", detail.get("mergeable_state") or "unknown")
+        try:
+            checks = await self._read(f"{r}/commits/{detail['head']['sha']}/check-runs", fresh=fresh, per_page=100)
         except GitHubError as e:
             if e.status != 403:
                 raise
             # Fine-grained PAT は Checks API を読めない。Actions の実行結果で代わりに判定する
-            ci = await self._actions_ci(r, detail["head"]["sha"])
+            ci = await self._actions_ci(r, detail["head"]["sha"], fresh=fresh)
         else:
             ci = _ci_state(checks.get("check_runs", []))
         return self._pull_basic(detail, ci, detail.get("mergeable_state") or "unknown")
 
-    async def _actions_ci(self, r: str, sha: str) -> str:
+    async def _actions_ci(self, r: str, sha: str, *, fresh: bool = False) -> str:
         """Checks API の代わりに GitHub Actions の実行結果から検査ランプを決める。Actions 以外の外部 CI は見えない。
 
         - 実行がある → その結果（合格 / 失敗 / 検査中）
@@ -194,10 +213,10 @@ class GitHubSource:
         - ワークフローはあるのに、この sha の実行が無い（まだ作られていないかもしれない）→ 取得不可のまま
         """
         try:
-            runs = (await self._get(f"{r}/actions/runs", head_sha=sha, per_page=50)).get("workflow_runs", [])
+            runs = (await self._read(f"{r}/actions/runs", fresh=fresh, head_sha=sha, per_page=50)).get("workflow_runs", [])
             if runs:
                 return _actions_state(runs)
-            workflows = await self._get(f"{r}/actions/workflows", per_page=1)
+            workflows = await self._read(f"{r}/actions/workflows", fresh=fresh, per_page=1)
         except GitHubError as e:
             if e.status in (403, 404):
                 return "unavailable"
@@ -255,8 +274,9 @@ class GitHubSource:
     async def create_pr(self, repo: str, head: str, base: str, title: str, body: str) -> dict:
         return await self._req("POST", f"{self._r(repo)}/pulls", json={"title": title, "head": head, "base": base, "body": body})
 
-    async def merge_pr(self, repo: str, number: int) -> dict:
-        return await self._req("PUT", f"{self._r(repo)}/pulls/{number}/merge", json={"merge_method": "merge"})
+    async def merge_pr(self, repo: str, number: int, expected_head_sha: str) -> dict:
+        return await self._req("PUT", f"{self._r(repo)}/pulls/{number}/merge",
+                               json={"merge_method": "merge", "sha": expected_head_sha})
 
     async def close_pr(self, repo: str, number: int) -> dict:
         return await self._req("PATCH", f"{self._r(repo)}/pulls/{number}", json={"state": "closed"})

@@ -113,6 +113,26 @@ RULES: list[Rule] = [
     ),
     # ---- 合流 ----
     Rule(
+        "merge_missing", TRIP, ("merge_pr",), lambda p, v: _pr(p, v) is None,
+        "開いていないスイッチは閉じられません",
+        "確認したプルリクエストが閉じたか、見つかりません。古い回路図の確認では合流できません。",
+        ("回路図を読み直し、現在のスイッチの状態を確認する",),
+    ),
+    Rule(
+        "merge_head_changed", TRIP, ("merge_pr",),
+        lambda p, v: bool(_pr(p, v)) and p.get("expected_head_sha") != _pr(p, v).head_sha,
+        "確認した後ではんだ点が変わったスイッチは閉じられません",
+        "分岐の先端が、画面で確認した先端と違います。検査結果と確認は新しいはんだ点へ引き継げません。",
+        ("回路図を読み直す", "新しい先端の変更と検査結果を確認し、もう一度操作を確認する"),
+    ),
+    Rule(
+        "merge_base_changed", TRIP, ("merge_pr",),
+        lambda p, v: bool(_pr(p, v)) and p.get("expected_base") != _pr(p, v).base,
+        "確認した合流先が変わったスイッチは閉じられません",
+        "プルリクエストの合流先が、画面で確認した幹線と違います。古い確認のまま別の合流先へ進めません。",
+        ("回路図を読み直し、合流先と変更を確認してからもう一度操作を確認する",),
+    ),
+    Rule(
         "merge_ci_unavailable", TRIP, ("merge_pr",), lambda p, v: bool(_pr(p, v)) and _pr(p, v).ci == "unavailable",
         "検査ランプが取得不可のスイッチは閉じられません",
         "GitHub の検査結果を取得できないため、安全に合流できるか確認できません。検査なしとは異なり、確認してもこのアプリからはマージできません。",

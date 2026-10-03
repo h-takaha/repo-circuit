@@ -266,7 +266,8 @@ def parts(view: RepoView) -> dict[str, dict]:
         }
     for pr in view.pulls:
         n = linked_issue(pr)
-        acts = [_act("merge_pr", "スイッチを閉じる（マージ）", r, number=pr.number),
+        acts = [_act("merge_pr", "スイッチを閉じる（マージ）", r, number=pr.number,
+                     expected_head_sha=pr.head_sha, expected_base=pr.base),
                 _act("close_pr", "スイッチを外す（合流せずに閉じる）", r, danger=True, number=pr.number)]
         out[f"pr:{pr.number}"] = {
             "title": f"スイッチ #{pr.number}「{pr.title}」",

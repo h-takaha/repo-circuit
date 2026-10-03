@@ -23,7 +23,7 @@ def _mock_agent_ops(check_status=403, detail_status=200, router=respx, runs=None
     """runs=None なら Actions API も 403（権限なし）。リストを渡すとその実行結果を返す。"""
     api = "https://api.github.com/repos/h-takaha/agent-ops"
     c = {"sha": "m1", "commit": {"message": "main", "committer": {"date": "2026-09-01T00:00:00Z"}}}
-    pr = _pr(2, "fix/1-x", "b1", "Fixes #1")
+    pr = _pr(2, "fix/1-x", "b" * 40, "Fixes #1")
     router.get("https://api.github.com/user/repos").respond(200, json=[
         {"name": "agent-ops", "owner": {"login": "h-takaha"}}])
     router.get(api).respond(200, json={"default_branch": "main"})
@@ -31,19 +31,19 @@ def _mock_agent_ops(check_status=403, detail_status=200, router=respx, runs=None
     router.get(f"{api}/branches").respond(200, json=[{"name": "main"}, {"name": "fix/1-x"}])
     router.get(f"{api}/compare/main...fix/1-x").respond(200, json={
         "ahead_by": 1, "behind_by": 0, "merge_base_commit": c,
-        "commits": [{**c, "sha": "b1"}]})
+        "commits": [{**c, "sha": "b" * 40}]})
     router.get(f"{api}/pulls", params={"state": "open"}).respond(200, json=[pr])
     router.get(f"{api}/pulls", params={"state": "closed"}).respond(200, json=[])
     router.get(f"{api}/issues").respond(200, json=[
         {"number": 1, "title": "skill 配置", "state": "open", "labels": [{"name": "feedback"}],
          "created_at": "2026-09-01T00:00:00Z"}])
     router.get(f"{api}/pulls/2").respond(detail_status, json=pr if detail_status == 200 else {"message": "Forbidden"})
-    checks = router.get(f"{api}/commits/b1/check-runs").respond(
+    checks = router.get(f"{api}/commits/{'b' * 40}/check-runs").respond(
         check_status, json={"check_runs": []} if check_status == 200 else {"message": "Forbidden"})
     if runs is None:
         router.get(f"{api}/actions/runs").respond(403, json={"message": "Forbidden"})
     else:
-        router.get(f"{api}/actions/runs", params={"head_sha": "b1"}).respond(200, json={"workflow_runs": runs})
+        router.get(f"{api}/actions/runs", params={"head_sha": "b" * 40}).respond(200, json={"workflow_runs": runs})
         router.get(f"{api}/actions/workflows").respond(200, json={"total_count": workflows})
     return api, checks
 
@@ -84,7 +84,8 @@ def _check_pages_and_merge(settings, router):
         guide = client.get("/guide").text
         assert "検査ランプが取得不可のスイッチは閉じられません" in guide
         csrf = re.search(r'name="csrf-token" content="([^"]+)"', guide).group(1)
-        body = {"action": "merge_pr", "params": {"repo": "agent-ops", "number": 2}, "ack": True}
+        body = {"action": "merge_pr", "params": {"repo": "agent-ops", "number": 2,
+                "expected_head_sha": "b" * 40, "expected_base": "main"}, "ack": True}
         blocked = client.post("/actions/run", json=body, headers={"X-CSRF-Token": csrf}).json()
         assert blocked["tripped"] and not blocked["ok"]
         assert any(v["id"] == "merge_ci_unavailable" for v in blocked["verdicts"])
@@ -201,3 +202,59 @@ def test_branch_sha_comes_from_branch_tip_even_when_compare_is_behind():
         'ahead_by': 0, 'behind_by': 2, 'commits': [], 'merge_base_commit': c})
     v = asyncio.run(GitHubSource('t', 'h-takaha').repo_view('tool'))
     assert v.branches[0].sha == 'real-tip'
+
+@respx.mock
+def test_merge_rest_payload_pins_confirmed_sha():
+    route = respx.put(f"{API}/pulls/2/merge").respond(200, json={"merged": True, "sha": "c" * 40})
+    result = asyncio.run(GitHubSource("t", "h-takaha").merge_pr("tool", 2, "a" * 40))
+    import json
+
+    assert json.loads(route.calls[0].request.content) == {"merge_method": "merge", "sha": "a" * 40}
+    assert result["sha"] == "c" * 40
+
+
+@respx.mock
+def test_merge_rest_preserves_head_mismatch_409():
+    route = respx.put(f"{API}/pulls/2/merge").respond(409, json={"message": "Head SHA changed"})
+    with pytest.raises(GitHubError) as caught:
+        asyncio.run(GitHubSource("t", "h-takaha").merge_pr("tool", 2, "a" * 40))
+    assert caught.value.status == 409 and route.call_count == 1
+
+
+@respx.mock
+def test_merge_validation_bypasses_cached_pr_and_check_results():
+    old = _pr(2, "work", "a" * 40)
+    detail = respx.get(f"{API}/pulls/2").respond(200, json=old)
+    old_checks = respx.get(f"{API}/commits/{'a' * 40}/check-runs").respond(
+        200, json={"check_runs": [{"status": "completed", "conclusion": "success"}]})
+    src = GitHubSource("t", "h-takaha", ttl=60)
+    cached = asyncio.run(src._pull(src._r("tool"), {"number": 2}))
+    assert cached.head_sha == "a" * 40 and cached.ci == "success"
+    detail.respond(200, json=_pr(2, "work", "b" * 40))
+    new_checks = respx.get(f"{API}/commits/{'b' * 40}/check-runs").respond(
+        200, json={"check_runs": [{"status": "in_progress", "conclusion": None}]})
+    fresh = asyncio.run(src.pull_for_merge("tool", 2))
+    assert fresh.head_sha == "b" * 40 and fresh.ci == "pending"
+    assert detail.call_count == 2 and old_checks.call_count == 1 and new_checks.call_count == 1
+
+
+@respx.mock
+def test_merge_validation_bypasses_cached_actions_fallback():
+    respx.get(f"{API}/pulls/2").respond(200, json=_pr(2, "work", "a" * 40))
+    respx.get(f"{API}/commits/{'a' * 40}/check-runs").respond(403, json={"message": "Forbidden"})
+    runs = respx.get(f"{API}/actions/runs").respond(
+        200, json={"workflow_runs": [_run(1, "completed", "success")]})
+    src = GitHubSource("t", "h-takaha", ttl=60)
+    assert asyncio.run(src._pull(src._r("tool"), {"number": 2})).ci == "success"
+    runs.respond(200, json={"workflow_runs": [_run(2, "in_progress", None)]})
+    assert asyncio.run(src.pull_for_merge("tool", 2)).ci == "pending"
+    assert runs.call_count == 2
+
+
+@respx.mock
+def test_merge_validation_does_not_hide_check_api_404():
+    respx.get(f"{API}/pulls/2").respond(200, json=_pr(2, "work", "a" * 40))
+    respx.get(f"{API}/commits/{'a' * 40}/check-runs").respond(404, json={"message": "Not Found"})
+    with pytest.raises(GitHubError) as caught:
+        asyncio.run(GitHubSource("t", "h-takaha").pull_for_merge("tool", 2))
+    assert caught.value.status == 404
