@@ -90,7 +90,10 @@ def command(action: str, p: dict, default_branch: str = "main", workdir: str = "
         return (f"gh pr create -R {r} --base {default_branch} --head {p['head']} -t {q(p.get('title', ''))}"
                 + (f" -b {q(body)}" if body else ""))
     if action == "merge_pr":
-        return f"gh pr merge {p['number']} -R {r} --merge"
+        sha = p.get("expected_head_sha", "")
+        if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", sha):
+            return ""
+        return f"gh pr merge {p['number']} -R {r} --merge --match-head-commit {sha.lower()}"
     if action == "close_pr":
         return f"gh pr close {p['number']} -R {r}"
     if action == "rerun_ci":

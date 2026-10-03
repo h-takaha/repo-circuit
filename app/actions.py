@@ -6,18 +6,22 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
 from .commands import command
 from .guards import ACTIONS, TRIP, WARN, evaluate
+from .github import GitHubError
 from .issues import build_body, labels_for
 from .model import RepoView
 from .service import Service
 
 
 class ActionError(Exception):
-    pass
+    def __init__(self, message: str, status: int = 400) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 def _int(params: dict, key: str) -> int:
@@ -41,7 +45,7 @@ def normalize(action: str, params: dict) -> dict:
         "create_branch": ("name",),
         "delete_branch": ("name",),
         "create_pr": ("head", "title"),
-        "merge_pr": ("number",),
+        "merge_pr": ("number", "expected_head_sha", "expected_base"),
         "close_pr": ("number",),
         "rerun_ci": ("number",),
     }[action]
@@ -50,6 +54,13 @@ def normalize(action: str, params: dict) -> dict:
         raise ActionError("入力が足りません: " + ", ".join(missing))
     if "number" in need:
         p["number"] = _int(p, "number")
+    if action == "merge_pr":
+        sha = p["expected_head_sha"]
+        if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", sha):
+            raise ActionError("確認した分岐の先端（head SHA）は40桁の16進数で指定してください")
+        if not isinstance(p["expected_base"], str):
+            raise ActionError("確認した合流先（base）は分岐名で指定してください")
+        p["expected_head_sha"] = sha.lower()
     return p
 
 
@@ -71,7 +82,8 @@ def preview(action: str, p: dict, view: RepoView) -> list[str]:
         return [f"分岐 {p['head']} の戻り口にスイッチ（プルリクエスト）が付きます", "自動チェック（CI）が走り、検査ランプが点きます"]
     if action == "merge_pr":
         pr = next((x for x in view.pulls if x.number == p["number"]), None)
-        lines = [f"スイッチ #{p['number']} が閉じ、分岐のはんだ点が幹線に入ります（マージ）"]
+        lines = [f"スイッチ #{p['number']} が閉じ、分岐のはんだ点が幹線に入ります（マージ）",
+                 f"確認した先端のはんだ点（head SHA）: {p['expected_head_sha']} ／ 合流先: {p['expected_base']}"]
         if pr:
             from .issues import linked_issue
 
@@ -114,7 +126,15 @@ class Actions:
     async def check(self, action: str, params: dict) -> dict:
         p = normalize(action, params)
         view = await self._view(p["repo"])
+        if action == "merge_pr":
+            # 表示用の60秒キャッシュでは合流を判断しない。入力のSHAは取り直したSHAで置き換えない。
+            pr = await self.service.source.pull_for_merge(p["repo"], p["number"])
+            view.pulls = [x for x in view.pulls if x.number != p["number"]]
+            if pr is not None and pr.state == "open" and not pr.merged:
+                view.pulls.append(pr)
         verdicts = evaluate(action, p, view)
+        if any(v.id in {"merge_missing", "merge_head_changed", "merge_base_changed"} for v in verdicts):
+            self.service.source.invalidate(p["repo"])
         lines = preview(action, p, view)
         self._log(action, p, verdicts)
         return {
@@ -139,6 +159,7 @@ class Actions:
         repo = p["repo"]
         url = ""
         number = None
+        merge_commit_sha = ""
         if action == "create_issue":
             body = build_body(p.get("situation", ""), p.get("want", ""), p.get("note", ""), p.get("source", "web"))
             res = await src.create_issue(repo, p["title"], body, labels_for(p.get("kind", ""), p.get("priority", "")))
@@ -164,7 +185,17 @@ class Actions:
             url, number = res.get("html_url", ""), res.get("number")
             message = f"スイッチ #{number} を付けました"
         elif action == "merge_pr":
-            await src.merge_pr(repo, p["number"])
+            try:
+                merged = await src.merge_pr(repo, p["number"], p["expected_head_sha"])
+            except GitHubError as e:
+                if e.status != 409:
+                    raise
+                src.invalidate(repo)
+                raise ActionError("確認後に分岐の先端が変わったため合流しませんでした。回路図を読み直し、検査と確認をやり直してください", status=409) from e
+            if not merged.get("merged"):
+                src.invalidate(repo)
+                return {**result, "ok": False, "message": "GitHub で合流が完了していません。状態を確認してください"}
+            merge_commit_sha = merged.get("sha") or ""
             message = f"スイッチ #{p['number']} を閉じました。通電しました"
         elif action == "close_pr":
             await src.close_pr(repo, p["number"])
@@ -178,7 +209,10 @@ class Actions:
         else:  # normalize() で弾いているので到達しない
             raise ActionError(action)
         src.invalidate(repo)
-        return {**result, "ok": True, "message": message, "url": url, "number": number}
+        response = {**result, "ok": True, "message": message, "url": url, "number": number}
+        if action == "merge_pr":
+            response.update(pr_head_sha=p["expected_head_sha"], merge_commit_sha=merge_commit_sha)
+        return response
 
     def _log(self, action: str, p: dict, verdicts) -> None:
         if not self.log_path or not verdicts:

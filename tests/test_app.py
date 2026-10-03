@@ -5,6 +5,14 @@ from fastapi.testclient import TestClient
 from conftest import AUTH
 
 from app.main import create_app
+from app.demo import DemoSource
+from app.github import GitHubError
+
+
+def _merge_params(number=5):
+    pr = next(p for p in DemoSource().views["event-calendar"].pulls if p.number == number)
+    return {"repo": "event-calendar", "number": number,
+            "expected_head_sha": pr.head_sha, "expected_base": pr.base}
 
 
 def test_healthz_is_public_and_rest_requires_auth(settings, source):
@@ -28,7 +36,7 @@ def test_pages_render(client):
 
 
 def test_actions_require_csrf(client, csrf):
-    body = {"action": "merge_pr", "params": {"repo": "event-calendar", "number": 6}}
+    body = {"action": "merge_pr", "params": _merge_params(6)}
     assert client.post("/actions/check", json=body).status_code == 403
     r = client.post("/actions/check", json=body, headers={"X-CSRF-Token": csrf})
     assert r.status_code == 200 and r.json()["tripped"] is True
@@ -36,7 +44,7 @@ def test_actions_require_csrf(client, csrf):
 
 def test_merge_flow_via_http(client, csrf):
     h = {"X-CSRF-Token": csrf}
-    body = {"action": "merge_pr", "params": {"repo": "event-calendar", "number": 5}}
+    body = {"action": "merge_pr", "params": _merge_params()}
     assert client.post("/actions/run", json=body, headers=h).json()["needs_ack"] is True
     r = client.post("/actions/run", json={**body, "ack": True}, headers=h).json()
     assert r["ok"] is True
@@ -97,7 +105,7 @@ def test_static_urls_carry_content_version(client):
 def test_csrf_and_submit_tokens_survive_restart_and_other_workers(settings, source, csrf):
     # 別プロセス（再起動後・別ワーカー）相当の app でも、同じページのトークンが通る
     other = TestClient(create_app(settings, source), headers=AUTH)
-    body = {"action": "merge_pr", "params": {"repo": "event-calendar", "number": 6}}
+    body = {"action": "merge_pr", "params": _merge_params(6)}
     assert other.post("/actions/check", json=body, headers={"X-CSRF-Token": csrf}).status_code == 200
 
     first = TestClient(create_app(settings, source), headers=AUTH)
@@ -108,3 +116,33 @@ def test_csrf_and_submit_tokens_survive_restart_and_other_workers(settings, sour
     assert again.status_code == 200 and "送信済み" in again.text
     forged = {**data, "submit_id": "abc.0000"}
     assert "送信済み" in other.post("/tray", data=forged, follow_redirects=False).text
+
+def test_missing_confirmed_sha_fails_closed(client, csrf):
+    response = client.post("/actions/run", headers={"X-CSRF-Token": csrf},
+                           json={"action": "merge_pr", "params": {"repo": "event-calendar", "number": 5}, "ack": True})
+    assert response.status_code == 400 and not response.json()["ok"]
+
+
+def test_http_old_ack_cannot_merge_a_new_head(client, csrf, source):
+    body = {"action": "merge_pr", "params": _merge_params()}
+    header = {"X-CSRF-Token": csrf}
+    assert not client.post("/actions/check", json=body, headers=header).json()["tripped"]
+    source.views["event-calendar"].pulls[0].head_sha = "e" * 40
+    response = client.post("/actions/run", json={**body, "ack": True}, headers=header)
+    assert response.json()["tripped"] and not response.json()["ok"]
+    assert source.views["event-calendar"].pulls[0].state == "open"
+
+
+def test_merge_api_head_mismatch_returns_http_409(client, csrf, source, monkeypatch):
+    calls = []
+
+    async def raced_merge(repo, number, expected_head_sha):
+        calls.append(expected_head_sha)
+        raise GitHubError(409, "Head SHA changed")
+
+    monkeypatch.setattr(source, "merge_pr", raced_merge)
+    params = _merge_params()
+    response = client.post("/actions/run", headers={"X-CSRF-Token": csrf},
+                           json={"action": "merge_pr", "params": params, "ack": True})
+    assert response.status_code == 409 and not response.json()["ok"]
+    assert calls == [params["expected_head_sha"]]

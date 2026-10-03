@@ -224,11 +224,18 @@ class DemoSource:
                                    url=f"https://github.com/h-takaha/{repo}/pull/{n}"))
         return {"number": n, "html_url": v.pulls[-1].url}
 
-    async def merge_pr(self, repo: str, number: int) -> dict:
+    async def pull_for_merge(self, repo: str, number: int) -> PullRequest | None:
+        return copy.deepcopy(next((p for p in self._v(repo).pulls if p.number == number), None))
+
+    async def merge_pr(self, repo: str, number: int, expected_head_sha: str) -> dict:
         from .issues import linked_issue
 
         v = self._v(repo)
         pr = next(p for p in v.pulls if p.number == number)
+        if pr.head_sha != expected_head_sha:
+            from .github import GitHubError
+
+            raise GitHubError(409, "Head SHA changed")
         b = v.branch(pr.head)
         if b:
             v.main_commits.extend(b.commits)
@@ -241,7 +248,7 @@ class DemoSource:
         n = linked_issue(pr)
         if n and v.issue(n):
             v.issue(n).state = "closed"
-        return {"merged": True}
+        return {"merged": True, "sha": pr.merge_commit_sha}
 
     async def close_pr(self, repo: str, number: int) -> dict:
         v = self._v(repo)

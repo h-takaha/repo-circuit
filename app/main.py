@@ -239,7 +239,7 @@ def create_app(settings: Settings | None = None, source=None) -> FastAPI:
                 return await actions.run(action, params, ack=bool(data.get("ack")))
             return await actions.check(action, params)
         except ActionError as e:
-            return JSONResponse({"ok": False, "message": str(e), "verdicts": []}, status_code=400)
+            return JSONResponse({"ok": False, "message": str(e), "verdicts": []}, status_code=e.status)
 
     @app.post("/actions/check")
     async def action_check(request: Request):

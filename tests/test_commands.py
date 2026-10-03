@@ -9,7 +9,8 @@ from app.guards import ACTIONS
 from app.model import Commit, LocalBranch, MergedBranch, now
 from app.service import Service
 
-SAMPLE = {"repo": "event-calendar", "title": "T", "number": 7, "name": "fix/1-x", "head": "fix/1-x"}
+SAMPLE = {"repo": "event-calendar", "title": "T", "number": 7, "name": "fix/1-x", "head": "fix/1-x",
+          "expected_head_sha": "a" * 40, "expected_base": "main"}
 WD = r"C:\lab\git\event-calendar"
 
 
@@ -228,3 +229,10 @@ def test_mark_origin_lag_counts_commits_or_says_unknown():
     v.local.dev_exists = False
     mark_origin_lag(v)
     assert not v.local.origin_stale
+
+def test_merge_command_pins_the_confirmed_head_and_never_fills_it_from_latest():
+    assert command("merge_pr", SAMPLE) == (
+        "gh pr merge 7 -R h-takaha/event-calendar --merge --match-head-commit " + "a" * 40)
+    for bad in ("", "short", "g" * 40, "a" * 40 + ";bad"):
+        assert command("merge_pr", {**SAMPLE, "expected_head_sha": bad}) == ""
+    assert command("merge_pr", {"repo": "event-calendar", "number": 7}) == ""
