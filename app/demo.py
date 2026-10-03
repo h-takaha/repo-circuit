@@ -183,6 +183,38 @@ class DemoSource:
             raise KeyError(name)
         return copy.deepcopy(self.views[name])
 
+    def worktree_snapshot(self, name: str):
+        """実FS・Gitを参照しない独立fixture。6登録と4判定状態を示す。"""
+        from .worktrees import FileSummary, Integration, WorktreeRow, WorktreeSnapshot, _guidance
+
+        v = self._v(name)
+        root = f"C:/lab/git/{name}"
+        snapshot = WorktreeSnapshot(source_path=root, state="complete", notes=["デモの登録・ファイル情報です。実際のフォルダは読み取っていません。"])
+        specs = [(root, True, v.default_branch, "available", "integrated"),
+                 (f"C:/Users/demo/.codex/worktrees/{name}/finished", False, "fix/finished", "available", "receipt_only"),
+                 (f"C:/Users/demo/.mulmoterminal/worktrees/{name}/active", False, "feat/active", "available", "unconfirmed"),
+                 (f"C:/lab/worktrees/{name}/detached", False, None, "available", "integrated"),
+                 (f"C:/lab/worktrees/{name}/locked", False, "exp/locked", "available", "unknown"),
+                 (f"C:/lab/worktrees/{name}/missing", False, "exp/missing", "missing", "unknown")]
+        for idx, (path, primary, branch, availability, state) in enumerate(specs):
+            head = v.head_sha if state == "integrated" else _sha(f"worktree:{name}:{idx}")
+            row = WorktreeRow(path, is_primary=primary, branch=branch,
+                head_sha=head if availability == "available" else None, detached=branch is None,
+                availability=availability, locked=idx == 4, locked_reason="管理元で保持中" if idx == 4 else None,
+                prunable=idx == 5, prunable_reason="登録先がありません" if idx == 5 else None)
+            if availability == "available":
+                row.files = FileSummary(0 if idx == 0 else 1, 1, 2,
+                    [] if idx == 0 else ["src/example.py"], ["notes/" + "長いファイル名" * 22 + ".txt"], [".env", ".venv/"], "complete")
+            row.integration = Integration(state, row.head_sha, f"refs/remotes/origin/{v.default_branch}",
+                                          v.head_sha, "デモ", "demo", notes=["例示用の証拠です。"])
+            if state == "receipt_only":
+                row.integration.pull = PullRequest(99, "作業完了の例", "", branch, v.default_branch,
+                    "closed", True, False, head, "none", "unknown", f"{v.url}/pull/99", _sha("demo-merge"), v.head_sha)
+            _guidance(row)
+            snapshot.rows.append(row)
+        snapshot.rows = snapshot.rows[:1] + sorted(snapshot.rows[1:], key=lambda row: row.path.casefold())
+        return snapshot
+
     def _v(self, repo: str) -> RepoView:
         return self.views[repo]
 

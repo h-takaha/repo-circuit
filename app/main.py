@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import asyncio
 import hmac
 import os
 import secrets
+import time
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -30,6 +32,7 @@ from .model import Issue, now
 from .pipeline import STAGES
 from .pipeline import rows as pipeline_rows
 from .service import Service
+from .worktrees import repo_path, validate_repo_name
 
 ROOT = Path(__file__).resolve().parent.parent
 RULE_NAMES = {r.id: r.rule for r in RULES}
@@ -118,7 +121,36 @@ def create_app(settings: Settings | None = None, source=None) -> FastAPI:
         order = {"wired": 0, "unwired": 1, "done": 2}
         chips.sort(key=lambda c: (order[c["state"]], c["number"]))
         return render(request, "circuit.html", view=view, scene=layout(view), parts=parts(view), status=status_text(view),
-                      chips=chips[:12], names=names, pipeline=pipeline_rows(view), stages=STAGES, active="circuit")
+                      chips=chips[:12], names=names, pipeline=pipeline_rows(view), stages=STAGES, active="circuit",
+                      repo_name=name, repo_url=view.url or None, repo_tab="circuit")
+
+    @app.get("/repo/{name}/worktrees", response_class=HTMLResponse)
+    async def worktrees(request: Request, name: str):
+        deadline = time.monotonic() + 15
+        try:
+            validate_repo_name(name)
+            path = None if settings.demo else repo_path(settings.lab_git_dir, name)
+        except (ValueError, OSError):
+            raise HTTPException(404, "作業場所のrepoが見つかりません")
+        names = []
+        try:
+            names = await asyncio.wait_for(source.repo_names(), timeout=3)
+        except Exception:
+            pass
+        github_known = name in names
+        # 登録されたGitHub repoか、設定済みroot直下の既存local repoだけ。
+        if name not in names and (settings.demo or not (path / ".git").exists()):
+            raise HTTPException(404, "作業場所のrepoが見つかりません")
+        if name not in names:
+            names = sorted(set(names + [name]))
+        try:
+            snapshot, url = await service.worktrees(name, deadline=deadline)
+        except (KeyError, ValueError):
+            raise HTTPException(404, "作業場所のrepoが見つかりません")
+        if not github_known and not snapshot.rows:
+            raise HTTPException(404, "有効なローカルrepoの登録を確認できませんでした")
+        return render(request, "worktrees.html", snapshot=snapshot, repo_name=name,
+                      repo_url=url, names=names, repo_tab="worktrees", active="circuit")
 
     @app.get("/repo", response_class=HTMLResponse)
     async def circuit_index():
