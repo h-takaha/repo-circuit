@@ -106,11 +106,11 @@ class Actions:
         self.service = service
         self.log_path = log_path
 
-    async def _view(self, repo: str) -> RepoView:
+    async def _view(self, repo: str, *, delete_branch: str | None = None) -> RepoView:
         names = await self.service.source.repo_names()
         if repo not in names:
             raise ActionError(f"{repo} という回路（repo）は見つかりません")
-        return await self.service.view(repo)
+        return await self.service.view(repo, delete_branch=delete_branch)
 
     async def command(self, action: str, params: dict) -> str:
         """入力の途中でも、いま入力されている内容で走るコマンドを返す（判定も記録もしない。表示専用）。"""
@@ -124,8 +124,12 @@ class Actions:
             return ""
 
     async def check(self, action: str, params: dict) -> dict:
+        result, _ = await self._check(action, params)
+        return result
+
+    async def _check(self, action: str, params: dict) -> tuple[dict, RepoView]:
         p = normalize(action, params)
-        view = await self._view(p["repo"])
+        view = await self._view(p["repo"], delete_branch=p["name"] if action == "delete_branch" else None)
         if action == "merge_pr":
             # 表示用の60秒キャッシュでは合流を判断しない。入力のSHAは取り直したSHAで置き換えない。
             pr = await self.service.source.pull_for_merge(p["repo"], p["number"])
@@ -145,16 +149,15 @@ class Actions:
             "verdicts": [v.to_dict() for v in verdicts],
             "tripped": any(v.level == TRIP for v in verdicts),
             "needs_ack": any(v.level == WARN for v in verdicts),
-        }
+        }, view
 
     async def run(self, action: str, params: dict, ack: bool = False) -> dict:
-        result = await self.check(action, params)
+        result, view = await self._check(action, params)
         if result["tripped"]:
             return {**result, "ok": False, "message": "ブレーカーが落ちたため実行しませんでした"}
         if result["needs_ack"] and not ack:
             return {**result, "ok": False, "message": "注意を読んで確認してください"}
         p = normalize(action, params)
-        view = await self.service.view(p["repo"])
         src = self.service.source
         repo = p["repo"]
         url = ""

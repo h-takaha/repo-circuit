@@ -76,6 +76,15 @@ def test_delete_rules():
     assert ids("delete_branch", {"name": "fix/12-button-size"}, v)["delete_open_pr"] == TRIP
 
 
+def test_unknown_deletion_evidence_trips_but_known_state_does_not():
+    v = view()
+    name = v.branches[0].name
+    assert 'delete_unknown' not in ids('delete_branch', {'name': name}, v)
+    v.merge_evidence_errors[name] = 'lookup failed'
+    assert ids('delete_branch', {'name': name}, v)['delete_unknown'] == TRIP
+    assert ids('delete_branch', {'name': 'missing'}, v)['delete_unknown'] == TRIP
+
+
 def test_create_pr_rules():
     v = view()
     v.branches[0].ahead = 0

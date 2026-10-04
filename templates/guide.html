@@ -40,10 +40,11 @@
       <tr><td>送電</td><td>push</td><td class="ds">作業台の分岐が GitHub の分岐より進んでいる数。「作業台のみ」はまだ一度も送っていない分岐。「GitHub が先行」は GitHub 側に作業台に無い変更がある（このアプリは fetch しない）</td></tr>
       <tr><td>スイッチ</td><td>プルリクエスト</td><td class="ds">GitHub にスイッチが付いているか</td></tr>
       <tr><td>検査</td><td>CI</td><td class="ds">検査ランプの色</td></tr>
-      <tr><td>合流</td><td>マージ</td><td class="ds">「閉じられる」ならスイッチを閉じてよい。合流済みの分岐も直近の数本を表示</td></tr>
+      <tr><td>合流</td><td>マージ</td><td class="ds">「閉じられる」ならスイッチを閉じてよい。合流済みは現在残る完了分岐と直近の記録を表示。古い記録も先端を照合し、取得できないときは「取得不可」</td></tr>
       <tr><td>本番</td><td>デプロイ</td><td class="ds">合流でできたはんだ点に、本番マーカーが追いついたか</td></tr>
     </tbody>
   </table>
+  <p class="ds">古い合流記録は分岐名で絞って最大3ページ追加確認します。表示は最大60秒の記録を含み、分岐の撤去を確認・実行するたびに先端とスイッチを読み直します。証拠を取得できない分岐、先端が変わった分岐、開いているスイッチや作業台の新しい変更がある分岐は撤去を止めます。</p>
   <span class="ds">
     <span class="pst ok"><i></i>済</span>　<span class="pst todo"><i></i>あなたの番</span>　<span class="pst wait"><i></i>待ち</span>　<span class="pst bad"><i></i>止まっている</span>　<span class="pst na"><i></i>分からない</span>　<span class="pst off"><i></i>まだ</span>
   </span>

@@ -259,6 +259,7 @@ def parts(view: RepoView) -> dict[str, dict]:
                       if merged else
                       f"幹線から引き出した作業用の配線。ここで何度はんだ付け（コミット）しても、幹線と本番には影響しません。幹線より {b.ahead} 進み、{b.behind} 遅れています。")
                      + (f"{b.idle_days} 日間はんだ付けされていません。" if rusty else "")
+                     + view.merge_evidence_errors.get(b.name, "")
                      + (f"付箋 #{issue.number} が差し込まれています。" if issue else "")
                      + (f"作業台には、まだ GitHub に送っていないはんだ点が {lb.unpushed} つあります（点線）。" if lb and lb.unpushed else "")
                      + ("GitHub 側に作業台に無いはんだ点があります（作業台に取り込むには git pull）。" if lb and lb.github_ahead else "")),

@@ -192,6 +192,13 @@ RULES: list[Rule] = [
     ),
     # ---- 分岐の撤去 ----
     Rule(
+        "delete_unknown", TRIP, ("delete_branch",),
+        lambda p, v: v.branch(str(p.get("name"))) is None or str(p.get("name")) in v.merge_evidence_errors,
+        "状態を確認できない分岐は撤去できません",
+        "分岐の先端や合流記録を取得できない、または取得範囲で確認できません。証拠が無いことを合流済みとは扱いません。",
+        ("回路図を読み直して最新の分岐と合流記録を確認する",),
+    ),
+    Rule(
         "delete_default", TRIP, ("delete_branch",), lambda p, v: p.get("name") == v.default_branch,
         "幹線は撤去できません",
         "幹線（main）は全員の土台で、本番につながっています。消すと repo 全体が壊れます。",
