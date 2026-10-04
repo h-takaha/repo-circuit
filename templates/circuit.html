@@ -34,24 +34,6 @@
       </div>
     </div>
     <p class="card status">{{ status }}</p>
-    {% if pipeline %}
-    <section class="card pipe" aria-label="工程表">
-      <div class="kicker">工程表 · 作業台 → GitHub → 本番</div>
-      <table>
-        <thead><tr><th>分岐 · 次にやること</th>{% for key, label, term in stages %}<th><span>{{ label }}</span><span class="cap">{{ term }}</span></th>{% endfor %}</tr></thead>
-        <tbody>
-        {% for r in pipeline %}
-          <tr class="{{ 'here' if r.here }}{{ ' merged' if r.merged }}">
-            <td><button type="button" class="pname" data-part="{{ r.part }}">{% if r.here %}<span class="herebadge">作業中</span>{% endif %}<span class="mono">{{ r.name }}</span></button>
-              <span class="pnext{{ ' pwarn' if r.warn }}">次: {{ r.next }}</span></td>
-            {% for st in r.stages %}<td><span class="pst {{ st.state }}" title="{{ st.label }}（{{ st.term }}）: {{ st.text or 'まだ' }}"><i aria-hidden="true"></i>{{ st.text or '—' }}</span></td>{% endfor %}
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
-      <p class="cap">はんだ付け・送電は作業台（この PC）を、スイッチ・検査・合流は GitHub を、本番は稼働クローンを読んでいます。作業台は fetch しないので、GitHub 側の新しい変更は「GitHub が先行」と出ます。</p>
-    </section>
-    {% endif %}
     <div class="board" style="max-width:100%">
       <div style="position:relative;width:{{ scene.width }}px;height:{{ scene.height }}px">
       <svg width="{{ scene.width }}" height="{{ scene.height }}" viewBox="0 0 {{ scene.width }} {{ scene.height }}" role="img" aria-label="{{ view.name }} の配線図">
@@ -78,6 +60,29 @@
     </div>
     {% if scene.hidden_branches %}<p class="cap">ほかに分岐が {{ scene.hidden_branches }} 本あります（表示は6本まで）。</p>{% endif %}
     <p class="cap">部品を押すと右に説明と、その部品でできる操作が出ます。</p>
+    {% if view.local.dev_exists %}
+    <button type="button" class="btn ghost" data-part="sync">作業台を最新の幹線に揃える</button>
+    <button type="button" class="btn" data-part="publish">変更を記録して本番まで届ける</button>
+    {% endif %}
+    {% if pipeline %}
+    <section class="card pipe" aria-label="工程表">
+      <div class="kicker">工程表 · 作業台 → GitHub → 本番</div>
+      <table>
+        <thead><tr><th>分岐 · 次にやること</th>{% for key, label, term in stages %}<th><span>{{ label }}</span><span class="cap">{{ term }}</span></th>{% endfor %}</tr></thead>
+        <tbody>
+        {% for r in pipeline %}
+          <tr class="{{ 'here' if r.here }}{{ ' merged' if r.merged }}">
+            <td><button type="button" class="pname" data-part="{{ r.part }}">{% if r.here %}<span class="herebadge">作業中</span>{% endif %}<span class="mono">{{ r.name }}</span></button>
+              <span class="pnext{{ ' pwarn' if r.warn }}">次: {{ r.next }}</span></td>
+            {% for st in r.stages %}<td><span class="pst {{ st.state }}" title="{{ st.label }}（{{ st.term }}）: {{ st.text or 'まだ' }}"><i aria-hidden="true"></i>{{ st.text or '—' }}</span></td>{% endfor %}
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      <p class="cap">はんだ付け・送電は作業台（この PC）を、スイッチ・検査・合流は GitHub を、本番は稼働クローンを読んでいます。作業台は fetch しないので、GitHub 側の新しい変更は「GitHub が先行」と出ます。</p>
+      <p class="cap">表示は最大8行です。進行中の作業を先に、合流済みは通常3件を表示します。現在残っている完了分岐が多いときは、8行の範囲内で合流済みの行が増えます。</p>
+    </section>
+    {% endif %}
   </section>
 
   <aside class="card cpanel" id="panel" aria-live="polite">

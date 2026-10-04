@@ -127,6 +127,11 @@ code.cmd{font-family:'IBM Plex Mono',monospace;font-size:12.5px;background:var(-
 .cpanel{width:320px;flex-shrink:0;padding:20px;display:flex;flex-direction:column;gap:12px;position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
 .cpanel p{margin:0;font-size:14px;line-height:1.7}
 .cpanel ul,.cpanel ol{margin:0;padding-left:20px;font-size:14px;line-height:1.7}
+.sync-step{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);padding-top:12px}
+.sync-step h3{margin:0;font-size:15px;line-height:1.5}
+.file-choice{display:flex;align-items:flex-start;gap:8px;font-size:13px;overflow-wrap:anywhere}
+.file-choice input{flex-shrink:0;margin-top:4px}
+.file-list{font-size:13px;overflow-wrap:anywhere}
 .acts{display:flex;flex-direction:column;gap:8px}
 .act{display:flex;flex-direction:column;gap:4px}
 .act-label{font-weight:700;font-size:14px;line-height:1.5}

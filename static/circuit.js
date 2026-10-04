@@ -35,6 +35,16 @@
     return el('details', {}, el('summary', {}, 'コマンドで言うと'), el('code', { class: 'cmd' }, cmd));
   }
 
+  function actionButtons(actions) {
+    return el('div', { class: 'acts' }, (actions || []).map((a) =>
+      el('div', { class: 'act' },
+        el('div', { class: 'act-label' }, a.label),
+        el('div', { class: 'act-btns' },
+          a.terminal ? null : el('button', { type: 'button', class: 'btn' + (a.danger ? ' danger' : ''), onclick: () => prepare(a, 'tool') }, 'ツールから実行'),
+          el('button', { type: 'button', class: 'btn ghost', onclick: () => (a.workbench ? prepareWorkbench(a) : a.terminal ? copyAndReport(a.cmd) : prepare(a, 'terminal')) }, a.workbench ? 'コマンドの案内へ' : 'ターミナルから実行')),
+        cmdBlock(a.cmd))));
+  }
+
   // 「ターミナルから実行」: コマンドをコピーするだけ。アプリは実行しない（作業台にも GitHub にも触れない）
   async function copyText(text) {
     try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* 下の方法で試す */ }
@@ -71,27 +81,85 @@
     const p = parts[partId];
     if (!p) return;
     current = partId;
+    if (p.dynamic_guide) return readGuide(p.repo, flash);
     highlight(partId);
     setBreaker('ok');
     document.querySelectorAll('.tripping').forEach((n) => n.classList.remove('tripping'));
     // 操作ごとに「ツールから実行」「ターミナルから実行」と、裏で走るコマンド（「コマンドで言うと」）を添える。
     // 作業台の操作（terminal）は、アプリが作業台に書き込まないので「ターミナルから実行」だけ。
-    const acts = el('div', { class: 'acts' }, (p.actions || []).map((a) =>
-      el('div', { class: 'act' },
-        el('div', { class: 'act-label' }, a.label),
-        el('div', { class: 'act-btns' },
-          a.terminal ? null : el('button', { type: 'button', class: 'btn' + (a.danger ? ' danger' : ''), onclick: () => prepare(a, 'tool') }, 'ツールから実行'),
-          el('button', { type: 'button', class: 'btn ghost', onclick: () => (a.terminal ? copyAndReport(a.cmd) : prepare(a, 'terminal')) }, 'ターミナルから実行')),
-        cmdBlock(a.cmd))));
+    const acts = actionButtons(p.actions);
+    const steps = (p.steps || []).map((step) => el('section', { class: 'sync-step' },
+      el('h3', {}, step.title), el('p', {}, step.body), actionButtons(step.actions)));
     setPanel(
       flash ? el('div', { class: 'flash ' + (flash.ok ? 'ok' : 'ng') }, flash.text) : null,
       el('div', { class: 'kicker' }, '部品'),
       el('h2', {}, p.title),
-      el('div', { class: 'term' }, 'GitHub では ', el('b', {}, p.term)),
+      el('div', { class: 'term' }, p.term_label || 'GitHub では ', el('b', {}, p.term)),
       el('p', {}, p.body),
+      p.files ? el('ul', { class: 'file-list' }, p.files.map((f) => el('li', {}, f))) : null,
       p.url ? el('a', { href: p.url, target: '_blank', rel: 'noopener', style: 'font-size:14px' }, 'GitHub で同じものを見る ↗') : null,
-      (p.actions || []).length ? acts : el('p', { class: 'cap' }, 'この部品で直接できる操作はありません。'),
+      (p.actions || []).length ? acts : steps.length ? null : el('p', { class: 'cap' }, 'この部品で直接できる操作はありません。'),
+      ...steps,
+      p.guided ? el('button', { type: 'button', class: 'btn ghost', onclick: () => readGuide(p.repo) }, '実行後、状態を読み直す') : null,
     );
+  }
+
+  async function readGuide(repo, flash) {
+    const seq = ++checkSeq;
+    setPanel(el('p', {}, '作業台とGitHub、本番の位置を確認しています…'));
+    try {
+      const response = await fetch('/repo/' + encodeURIComponent(repo) + '/publish-guide');
+      const guide = await response.json();
+      if (seq !== checkSeq) return;
+      if (!response.ok) return showError(guide.message || guide.detail || '状態を取得できませんでした。');
+      parts.publish = guide;
+      show('publish', flash);
+    } catch (e) {
+      if (seq === checkSeq) showError('状態を取得できませんでした。接続を確認して読み直してください。');
+    }
+  }
+
+  function prepareWorkbench(a) {
+    const selected = [];
+    const files = (a.files || []).map((path) => {
+      const checkbox = el('input', { type: 'checkbox' });
+      selected.push({ path, checkbox });
+      return el('label', { class: 'file-choice' }, checkbox, el('span', {}, path));
+    });
+    const message = a.workbench === 'commit' ? el('input', { class: 'inp', id: 'commit-message', maxlength: 500 }) : null;
+    const staged = parts[current].files || [];
+    const index = parts[current].index || '';
+    setPanel(el('h2', {}, a.label),
+      el('p', {}, a.workbench === 'stage' ? '今回の修正に含めるファイルを選んでください。選ばないファイルは記録対象に入りません。' : a.workbench === 'commit' ? '選択済みのファイルだけを記録します。変更の名前を入力してください。' : '同じ分岐へpushします。幹線への合流は次の段です。'),
+      ...files,
+      message ? el('ul', { class: 'file-list' }, staged.map((f) => el('li', {}, f))) : null,
+      message ? el('label', { for: 'commit-message' }, '変更の名前（コミットメッセージ）') : null,
+      message,
+      el('div', { class: 'acts' },
+        el('button', { type: 'button', class: 'btn', onclick: () => workbenchCommand(a, {
+          files: selected.filter((s) => s.checkbox.checked).map((s) => s.path),
+          message: message ? message.value : '', expected_files: staged, expected_index: index,
+        }) }, 'コマンドを確認する'),
+        el('button', { type: 'button', class: 'btn ghost', onclick: () => show(current) }, '戻る')));
+  }
+
+  async function workbenchCommand(a, inputs) {
+    const seq = ++checkSeq;
+    try {
+      const res = await post('/workbench/command', { ...a.params, ...inputs, operation: a.workbench });
+      if (seq !== checkSeq) return;
+      if (!res.ok || !res.cmd) return showError(res.message || res.detail);
+      a.cmd = res.cmd;
+      setPanel(el('h2', {}, 'コマンドを確認してコピーする'),
+        el('p', {}, 'PowerShellに貼り付けて実行してください。実行後は「状態を読み直す」で次の手順を確認します。'),
+        inputs.files.length ? el('ul', { class: 'file-list' }, inputs.files.map((f) => el('li', {}, f))) : null,
+        inputs.message ? el('p', {}, '変更の名前: ' + inputs.message) : null,
+        el('code', { class: 'cmd' }, res.cmd),
+        el('button', { type: 'button', class: 'btn', onclick: () => copyAndReport(res.cmd) }, 'コマンドをコピー'),
+        el('button', { type: 'button', class: 'btn ghost', onclick: () => show(current) }, '戻る'));
+    } catch (e) {
+      if (seq === checkSeq) showError('コマンドの案内を取得できませんでした。状態を読み直してください。');
+    }
   }
 
   // 入力が要る操作は、先に入力欄を出す

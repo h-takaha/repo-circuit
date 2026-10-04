@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import re
+import hashlib
 
 from .issues import build_body, labels_for
 
@@ -48,6 +49,26 @@ def fetch_origin(workdir: str) -> str:
     return _git(workdir, "fetch", "origin")
 
 
+def fast_forward_local(workdir: str, default_branch: str) -> str:
+    """コピー後も幹線と未コミットを確認し、前へ進めるだけ。PowerShell用。"""
+    if not safe_ref(default_branch):
+        return ""
+    git = f"git -C {q(workdir)}"
+    return (
+        f"$circuitBranch = {git} branch --show-current\n"
+        f"if ($LASTEXITCODE -ne 0 -or $circuitBranch -ne {q(default_branch)}) {{\n"
+        f"  Write-Error {q('先に幹線 ' + default_branch + ' に切り替えてください。')}\n"
+        "} else {\n"
+        f"  $circuitChanges = {git} --no-optional-locks status --porcelain\n"
+        "  if ($LASTEXITCODE -ne 0 -or $circuitChanges) {\n"
+        f"    Write-Error {q('未コミットの変更、または読み取り失敗があります。内容を確認してください。')}\n"
+        "  } else {\n"
+        f"    {git} merge --ff-only {q('refs/remotes/origin/' + default_branch)}\n"
+        "  }\n"
+        "}"
+    )
+
+
 def prune_origin(workdir: str) -> str:
     """GitHub にはもう無い分岐の、手元の古い記録（origin/…）だけを消す。fetch はしない。"""
     return _git(workdir, "remote", "prune", "origin")
@@ -57,6 +78,49 @@ def push_local(workdir: str, name: str, first_time: bool) -> str:
     if not safe_ref(name):
         return ""
     return _git(workdir, "push", "-u", "origin", name) if first_time else _git(workdir, "push", "origin", name)
+
+
+def publish_local(workdir: str, branch: str, head: str, operation: str,
+                  files: list[str] | None = None, message: str = "", index: str = "") -> str:
+    """案内で選んだ対象だけをコピーする。コピー後の分岐・HEAD変更でも止める。"""
+    if not safe_ref(branch) or not re.fullmatch(r"[0-9a-fA-F]{40}", head):
+        return ""
+    git = f"git --literal-pathspecs -C {q(workdir)}"
+    if operation == "stage" and files:
+        cmd = f"{git} add -- " + " ".join(q(path) for path in files)
+    elif operation == "commit" and message.strip() and index:
+        # 手動で段を進めるので、このcommitの自動push・即時deployを抑止する。
+        message = message.strip() + " [no-push] [no-deploy]"
+        cmd = f"{git} commit -m {q(message)}"
+        # raw差分にはタブと改行がある。端末への貼付けで崩れない照合値だけを埋め込む。
+        signature = hashlib.sha256(index.encode("utf-8")).hexdigest()
+        cmd = (
+            f'$circuitIndex = {git} -c core.quotepath=true diff --cached --raw --no-abbrev --no-ext-diff --no-renames\n'
+            '  $circuitIndexExit = $LASTEXITCODE\n'
+            '  $circuitHasher = [System.Security.Cryptography.SHA256]::Create()\n'
+            '  try {\n'
+            '    $circuitBytes = [System.Text.Encoding]::UTF8.GetBytes(($circuitIndex -join "`n"))\n'
+            '    $circuitSignature = [System.BitConverter]::ToString($circuitHasher.ComputeHash($circuitBytes)).Replace("-", "").ToLowerInvariant()\n'
+            '  } finally { $circuitHasher.Dispose() }\n'
+            f'  if ($circuitIndexExit -ne 0 -or $circuitSignature -ne {q(signature)}) {{\n'
+            f"    Write-Error {q('記録対象が変わりました。アプリで状態を読み直してください。')}\n"
+            "  } else {\n"
+            f"    {cmd}\n"
+            "  }"
+        )
+    elif operation == "push":
+        cmd = f"{git} push -u origin {q(branch)}"
+    else:
+        return ""
+    return (
+        f"$circuitBranch = {git} branch --show-current\n"
+        f"$circuitHead = {git} rev-parse HEAD\n"
+        f"if ($LASTEXITCODE -ne 0 -or $circuitBranch -ne {q(branch)} -or $circuitHead -ne {q(head)}) {{\n"
+        f"  Write-Error {q('作業台の位置が変わりました。アプリで状態を読み直してください。')}\n"
+        "} else {\n"
+        f"  {cmd}\n"
+        "}"
+    )
 
 
 # ---- GitHub への書き込み操作（ツールからも実行できる。同じ操作をターミナルで行うなら） ----
