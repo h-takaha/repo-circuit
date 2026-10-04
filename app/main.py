@@ -29,6 +29,8 @@ from .github import GitHubError, GitHubSource
 from .guards import ACTIONS, RULES
 from .issues import KINDS, PRIORITIES, board_state, labels_for, wire_for
 from .model import Issue, now
+from .localgit import read_publish_state
+from .publish import guide as publish_guide, local_command
 from .pipeline import STAGES
 from .pipeline import rows as pipeline_rows
 from .service import Service
@@ -156,6 +158,43 @@ def create_app(settings: Settings | None = None, source=None) -> FastAPI:
     async def circuit_index():
         names = await source.repo_names()
         return RedirectResponse(f"/repo/{names[0]}" if names else "/", status_code=303)
+
+    async def publish_snapshot(name: str, fresh: bool = False):
+        try:
+            validate_repo_name(name)
+            path = None if settings.demo else repo_path(settings.lab_git_dir, name)
+            if name not in await source.repo_names():
+                raise ValueError("unknown repo")
+        except (ValueError, OSError):
+            raise HTTPException(404, "案内するrepoが見つかりません")
+        if fresh and hasattr(source, "invalidate"):
+            source.invalidate(name)
+        view = await service.view(name)
+        if settings.demo:
+            state = {"branch": view.local.dev_branch, "head": view.local.dev_head,
+                     "staged": [], "unstaged": ["app/example.py", "tests/test_example.py"] if view.local.dev_uncommitted else [],
+                     "conflicted": False, "error": ""}
+        else:
+            state = await asyncio.to_thread(read_publish_state, path)
+        return view, state
+
+    @app.get("/repo/{name}/publish-guide")
+    async def publish_steps(name: str):
+        view, state = await publish_snapshot(name, fresh=True)
+        return publish_guide(view, state)
+
+    @app.post("/workbench/command")
+    async def workbench_command(request: Request):
+        # 読み取りとコマンド生成だけ。実行する経路は作らない。
+        check_csrf(request.headers.get("X-CSRF-Token"))
+        data = await request.json()
+        if not isinstance(data, dict) or not isinstance(data.get("repo"), str):
+            raise HTTPException(400, "repoを指定してください")
+        view, state = await publish_snapshot(data["repo"])
+        try:
+            return {"ok": True, "cmd": local_command(view, state, data)}
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "message": str(exc)}, status_code=400)
 
     # 起票フォームの使い捨て送信トークン（「ランダムID.署名」）。署名はどのワーカーでも検証でき、
     # 使用済み ID はファイルで共有する。再読み込みによる再送信や二重クリックで Issue が2件できるのを防ぐ。

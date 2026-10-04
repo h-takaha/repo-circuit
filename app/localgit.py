@@ -16,7 +16,7 @@ from .model import Commit, LocalBranch, LocalState, MergedBranch
 _TIMEOUT = 3
 
 
-def _git(cwd: Path, *args: str) -> str | None:
+def _git(cwd: Path, *args: str, strip: bool = True) -> str | None:
     try:
         r = subprocess.run(
             ["git", *args],
@@ -30,7 +30,43 @@ def _git(cwd: Path, *args: str) -> str | None:
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
-    return r.stdout.strip() if r.returncode == 0 else None
+    return (r.stdout.strip() if strip else r.stdout) if r.returncode == 0 else None
+
+
+def read_publish_state(dev: Path) -> dict:
+    """コマンド案内用の現在位置とindex。ファイル内容を読まず、gitも変更しない。"""
+    branch = _git(dev, "branch", "--show-current")
+    head = _git(dev, "rev-parse", "HEAD")
+    status = _git(dev, "--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all", strip=False)
+    index = _git(dev, "-c", "core.quotepath=true", "diff", "--cached", "--raw", "--no-abbrev", "--no-ext-diff", "--no-renames")
+    state = {"branch": branch, "head": head, "staged": [], "unstaged": [], "index": index,
+             "conflicted": False, "error": ""}
+    if branch is None or not head or status is None or index is None:
+        state["error"] = "作業台の状態を取得できません。読み直して確認してください。"
+        return state
+    tokens, pos = status.split("\0"), 0
+    while pos < len(tokens):
+        token = tokens[pos]
+        pos += 1
+        if not token:
+            continue
+        if len(token) < 4 or token[2] != " ":
+            state["error"] = "変更ファイルの一覧を解釈できませんでした。"
+            break
+        code, paths = token[:2], [token[3:]]
+        if "R" in code or "C" in code:
+            if pos >= len(tokens) or not tokens[pos]:
+                state["error"] = "移動したファイルを確認できませんでした。"
+                break
+            paths.append(tokens[pos])
+            pos += 1
+        if code in {"DD", "AU", "UD", "UA", "DU", "AA", "UU"}:
+            state["conflicted"] = True
+        if code != "??" and code[0] != " ":
+            state["staged"].extend(paths)
+        if code == "??" or code[1] != " ":
+            state["unstaged"].extend(paths)
+    return state
 
 
 MAX_LOCAL_BRANCHES = 10

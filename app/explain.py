@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .circuit import RUST_DAYS
-from .commands import command, default_workdir, delete_local, fetch_origin, prune_origin, push_local, switch_local
+from .commands import command, default_workdir, delete_local, fast_forward_local, fetch_origin, prune_origin, push_local, switch_local
 from .issues import KINDS, PRIORITIES, board_state, branch_linked_issue, branch_name_for, linked_issue, wire_for
 from .model import RepoView
 from .pipeline import local_totals
@@ -218,6 +218,8 @@ def parts(view: RepoView) -> dict[str, dict]:
                        + ([] if here else _term("作業台をこの分岐に切り替える", switch_local(wd, lb.name))),
         }
     if loc.dev_exists:
+        out["publish"] = {"title": "変更を記録して本番まで届ける", "dynamic_guide": True, "repo": r, "actions": []}
+        out["sync"] = _sync_part(view, wd)
         out["cleanup"] = _cleanup_part(view, wd)
     commits = {c.sha: c for c in view.main_commits}
     for b in view.branches:
@@ -299,6 +301,41 @@ def parts(view: RepoView) -> dict[str, dict]:
 
 
 CLEANUP_SHOWN = 10
+
+
+def _sync_part(view: RepoView, wd: str) -> dict:
+    default = view.default_branch
+    dirty = view.local.dev_uncommitted
+    steps = [
+        {
+            "title": "1. 幹線の最新情報を受け取る（fetch）",
+            "body": "GitHub の情報を origin/… に保存します。作業中のファイルや分岐は変わりません。成功したら次へ進みます。",
+            "actions": _term("最新情報を受け取る", fetch_origin(wd)),
+        },
+        {
+            "title": f"2. 作業台を幹線に戻す（switch {default}）",
+            "body": f"いま開いている分岐から、手元の {default} に切り替えます。ファイルも手元の幹線の内容になります。すでに幹線ならこの段は不要です。切り替えに失敗したら、そこで止めて内容を確認します。",
+            "actions": _term("幹線に切り替える", switch_local(wd, default)),
+        },
+        {
+            "title": "3. 幹線を最新の位置まで進める（merge --ff-only）",
+            "body": f"取得した origin/{default} を手元の幹線に取り込みます。新しい合流コミットは作らず、前へ進められる場合だけ更新します。独自のコミットで履歴が分かれていれば停止します。「Already up to date」でも手元が先行している場合があるので、最後に回路図を再読み込みし、作業台の旗が幹線の先端と同じ位置になったか確認してください。",
+            "actions": _term("幹線を前へ進めて更新する", fast_forward_local(wd, default)),
+        },
+    ]
+    if dirty:
+        for step in steps:
+            step["actions"] = []
+    return {
+        "title": "作業台を最新の幹線に揃える",
+        "term_label": "作業台では ",
+        "term": f"開発リポジトリ {wd} · 幹線 {default}",
+        "body": (f"未コミットの変更が {dirty} 件あります。まず内容を確認し、必要な作業を記録してから、この案内を開き直してください。" if dirty else
+                 "修正を幹線に合流した後、次の作業に備えて手元を揃えます。以下を一つずつ順番に実行し、エラーが出たら次へ進まず確認してください。")
+                + "アプリはコマンドをコピーするだけです。修正用の分岐は残り、GitHub への送信や本番の更新は行いません。",
+        "actions": [],
+        "steps": steps,
+    }
 
 
 def _cleanup_part(view: RepoView, wd: str) -> dict:
