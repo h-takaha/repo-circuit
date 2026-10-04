@@ -1,0 +1,21 @@
+{
+  "evidence_source": "User supplied reproduction on 2026-10-04; retained without requiring the live branch",
+  "tree_sha": "1b2a16c0b0cd0d6b5ce8d9eabcf1575a50d2e8bd",
+  "merge_in_origin_main": true,
+  "head_in_origin_main": false,
+  "pull": {
+    "number": 8,
+    "title": "LLM dispatcher OCR",
+    "body": "",
+    "head": {
+      "ref": "codex/llm-dispatcher-ocr",
+      "sha": "361746d43a3b4c7acb7c966b6eab36aa862d7d3c",
+      "repo": {"full_name": "h-takaha/investment-tracker"}
+    },
+    "base": {"ref": "main"},
+    "state": "closed",
+    "merged_at": "2026-07-26T00:00:00Z",
+    "merge_commit_sha": "49692c7b98d4566ad4039a6a7802ae5cee231963",
+    "html_url": "https://github.com/h-takaha/investment-tracker/pull/8"
+  }
+}

@@ -71,7 +71,8 @@ def test_merged_branch_left_on_github_is_shown_once():
 
     v = view()
     # 合流後も GitHub に残っている分岐（幹線より進んでいない）。スイッチを付ける案内は出さない
-    v.branches.append(Branch("fix/9-log-format", v.main_commits[-1].sha, 0, 0, [], v.main_commits[-1].sha, now()))
+    pr = next(p for p in v.closed_pulls if p.head == "fix/9-log-format")
+    v.branches.append(Branch("fix/9-log-format", pr.head_sha, 0, 0, [], v.main_commits[-1].sha, now()))
     names = [r["name"] for r in rows(v)]
     assert names.count("fix/9-log-format") == 1
     assert _row(rows(v), "fix/9-log-format")["merge"] == ("ok", "済")

@@ -16,6 +16,8 @@ from .issues import FEEDBACK_LABEL, LABEL_COLORS
 API = "https://api.github.com"
 MAX_BRANCHES = 8
 MAIN_WINDOW = 8
+MERGED_LOOKUP_PAGE_SIZE = 100
+MERGED_LOOKUP_MAX_PAGES = 3
 
 
 class GitHubError(Exception):
@@ -152,7 +154,7 @@ class GitHubSource:
             for i in issues_raw
             if "pull_request" not in i
         ]
-        return RepoView(
+        view = RepoView(
             name=name,
             default_branch=default,
             main_commits=main_commits,
@@ -163,6 +165,75 @@ class GitHubSource:
             github_names=[b["name"] for b in branches_raw] if len(branches_raw) < 100 else None,
             url=meta.get("html_url", ""),
         )
+        # 全PRの履歴を走査せず、表示する分岐の不足した証拠だけ補う。
+        await asyncio.gather(*(self._supplement_merged(view, b, check_open=len(pulls_raw) >= 50) for b in branches
+                               if not view.pull_for(b.name) and (len(pulls_raw) >= 50 or not view.merged_for(b.name))))
+        return view
+
+    async def _merged_head(self, repo: str, default: str, branch: Branch, *, fresh: bool = False) -> PullRequest | None:
+        """同名分岐の閉じたPRを期限付きcacheで読む。先端一致まで最大3ページ。"""
+        if not branch.sha:
+            raise ValueError("branch head missing")
+        for page in range(1, MERGED_LOOKUP_MAX_PAGES + 1):
+            raw = await self._read(f"{self._r(repo)}/pulls", fresh=fresh, state="closed",
+                                   head=f"{self.owner}:{branch.name}", base=default,
+                                   sort="created", direction="desc", per_page=MERGED_LOOKUP_PAGE_SIZE, page=page)
+            for p in raw:
+                if (p.get("merged_at") and p.get("state") == "closed"
+                        and p["head"]["ref"] == branch.name and p["head"]["sha"] == branch.sha
+                        and p["base"]["ref"] == default and p.get("merge_commit_sha")
+                        and (p["head"].get("repo") or {}).get("full_name") == f"{self.owner}/{repo}"):
+                    return self._pull_basic(p, "none", "unknown")
+            if len(raw) < MERGED_LOOKUP_PAGE_SIZE:
+                return None
+        raise ValueError("merged evidence pagination limit reached")
+
+    async def _supplement_merged(self, view: RepoView, branch: Branch, *, fresh: bool = False, check_open: bool = False) -> None:
+        try:
+            if check_open:
+                # open一覧も上限に達したら、古い合流済み記録で再利用中の分岐を隠さない。
+                opened = await self._read(f"{self._r(view.name)}/pulls", state="open",
+                                          head=f"{self.owner}:{branch.name}", per_page=100)
+                if opened:
+                    view.pulls.extend(await asyncio.gather(*(self._pull(self._r(view.name), p) for p in opened)))
+                    return
+                if view.merged_for(branch.name):
+                    return
+            pr = await self._merged_head(view.name, view.default_branch, branch, fresh=fresh)
+        except (GitHubError, httpx.HTTPError, ValueError, KeyError, TypeError):
+            view.merge_evidence_errors[branch.name] = "合流記録を確認できません。回路図を読み直してください。"
+            return
+        if pr and not any(p.number == pr.number for p in view.closed_pulls):
+            view.closed_pulls.append(pr)
+
+    async def repo_view_for_delete(self, name: str, branch_name: str) -> RepoView:
+        """操作確認・実行のたびに対象の先端、open PR、合流証拠をcache外で再取得。"""
+        view = await self.repo_view(name)
+        r = self._r(name)
+        view.closed_pulls = [p for p in view.closed_pulls if p.head != branch_name]
+        view.pulls = [p for p in view.pulls if p.head != branch_name]
+        view.merge_evidence_errors.pop(branch_name, None)
+        try:
+            meta = await self._read(r, fresh=True)
+            view.default_branch = meta["default_branch"]
+            raw, opened = await asyncio.gather(
+                self._read(f"{r}/branches/{quote(branch_name, safe='')}", fresh=True),
+                self._read(f"{r}/pulls", fresh=True, state="open", head=f"{self.owner}:{branch_name}", per_page=100),
+            )
+            sha = raw["commit"]["sha"]
+            if not isinstance(sha, str) or len(sha) != 40 or any(c not in "0123456789abcdef" for c in sha):
+                raise ValueError("branch head invalid")
+            # compareも取得した先端に固定し、名前が途中で動いても別の先端の進みを混ぜない。
+            branch = await self._branch(r, view.default_branch, branch_name, fresh=True, ref=sha)
+            branch.sha = sha
+            view.branches = [b for b in view.branches if b.name != branch_name] + [branch]
+            view.pulls += [self._pull_basic(p, "none", "unknown") for p in opened
+                           if p["head"]["ref"] == branch_name and p["state"] == "open"]
+            if not view.pull_for(branch_name):
+                await self._supplement_merged(view, branch, fresh=True)
+        except (GitHubError, httpx.HTTPError, ValueError, KeyError, TypeError):
+            view.merge_evidence_errors[branch_name] = "分岐の最新状態を確認できません。回路図を読み直してください。"
+        return view
 
     async def worktree_evidence(self, name: str):
         """worktree画面に必要な証拠のみ。回路の分岐表示上限に依存しない。"""
@@ -194,8 +265,10 @@ class GitHubSource:
             pulls=[self._pull_basic(p, "none", "unknown") for p in closed],
             source="GitHubの既存cache（障害時）", freshness="stale", repo_url=meta.get("html_url"))
 
-    async def _branch(self, r: str, default: str, name: str) -> Branch:
-        cmp = await self._get(f"{r}/compare/{default}...{name}")
+    async def _branch(self, r: str, default: str, name: str, *, fresh: bool = False, ref: str | None = None) -> Branch:
+        cmp = await self._read(f"{r}/compare/{default}...{ref or name}", fresh=fresh)
+        if fresh and any(type(cmp.get(k)) is not int or cmp[k] < 0 for k in ("ahead_by", "behind_by")):
+            raise ValueError("comparison counts unavailable")
         commits = [_commit(c) for c in cmp.get("commits", [])]
         head = cmp.get("commits", [{}])[-1].get("sha", "") if commits else cmp.get("merge_base_commit", {}).get("sha", "")
         last = commits[-1].date if commits else _dt(cmp.get("merge_base_commit", {}).get("commit", {}).get("committer", {}).get("date"))

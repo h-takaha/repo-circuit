@@ -63,7 +63,12 @@ def rows(view: RepoView) -> list[dict]:
         if row:
             out.append(row)
 
-    merged = [p for p in view.closed_pulls if p.merged and p.base == view.default_branch][:MAX_MERGED]
+    # 古い追加証拠も、現在残っている完了分岐の行から漏らさない。
+    current = [view.merged_for(b.name) for b in view.branches if view.completed_branch(b.name)]
+    active = {r['name'] for r in out}
+    merged = current + [p for p in view.closed_pulls if p.merged and p.base == view.default_branch
+                        and p.head not in active and p.number not in {x.number for x in current}]
+    merged = merged[:max(MAX_MERGED, len(current))]
     out += [_merged_row(view, p) for p in merged]
     return out[:MAX_ROWS]
 
@@ -125,6 +130,9 @@ def _branch_row(view: RepoView, name: str) -> dict | None:
             nxt = nxt or {"failure": "検査ランプの失敗ログを見て、分岐に修正をはんだ付けする",
                           "pending": "検査が終わるのを待つ",
                           "unavailable": "検査結果を読める権限を用意する"}.get(pr.ci, "下書きを仕上げる")
+    elif name in view.merge_evidence_errors:
+        st["merge"] = _stage("na", "取得不可")
+        nxt = nxt or view.merge_evidence_errors[name]
     elif view.merged_for(name):
         st["merge"] = _stage("off", "前回合流済み")
         nxt = nxt or "新しい変更をはんだ付けして、GitHub へ送る"

@@ -129,6 +129,7 @@ class LocalState:
     run_exists: bool = False
     run_head: str = ""
     run_dirty: bool = False
+    checked_branch_work: dict[str, bool] = field(default_factory=dict)
 
 
 @dataclass
@@ -144,6 +145,7 @@ class RepoView:
     github_names: list[str] | None = None  # GitHub 上の分岐名の全部。取得が上限（100本）に達したときは None（分からない）
     autodeploy: bool = False
     url: str = ""
+    merge_evidence_errors: dict[str, str] = field(default_factory=dict)
 
     def pull_for(self, branch: str) -> PullRequest | None:
         for pr in self.pulls:
@@ -172,15 +174,15 @@ class RepoView:
     def merged_for(self, name: str) -> PullRequest | None:
         """同名というだけでなく、現在の GitHub 先端が合流済み PR の先端と一致するか。"""
         b = self.branch(name)
-        if self.pull_for(name):
+        if self.pull_for(name) or name in self.merge_evidence_errors:
             return None
         return next((p for p in self.closed_pulls
                      if p.merged and p.base == self.default_branch and p.head == name
-                     and (b is None or (b.sha and b.sha == p.head_sha) or b.ahead == 0)), None)
+                     and (b is None or (b.sha and b.sha == p.head_sha))), None)
 
     def local_work(self, name: str) -> bool:
         lb = self.local_branch(name)
-        return bool((lb and lb.unpushed) or
+        return bool(self.local.checked_branch_work.get(name) or (lb and lb.unpushed) or
                     (self.local.dev_branch == name and (self.local.dev_uncommitted or self.local.dev_unpushed)))
 
     def completed_branch(self, name: str) -> bool:

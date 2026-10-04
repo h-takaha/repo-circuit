@@ -6,7 +6,7 @@ import asyncio
 import time
 
 from .config import Settings
-from .localgit import load_autodeploy, read_local_state
+from .localgit import load_autodeploy, read_local_state, read_branch_work
 from .model import RepoView
 from .worktrees import RepoEvidence, read_worktrees, repo_path
 
@@ -28,9 +28,10 @@ class Service:
         self.source = source
         self.autodeploy = {} if settings.demo else load_autodeploy(settings.autodeploy_path)
 
-    async def view(self, name: str, detail: bool = True) -> RepoView:
+    async def view(self, name: str, detail: bool = True, *, delete_branch: str | None = None) -> RepoView:
         """detail=False は配電盤・部品トレイ用。作業台を分岐ごとには読まない（repo が多いと遅いため）。"""
-        v = await self.source.repo_view(name)
+        v = (await self.source.repo_view_for_delete(name, delete_branch)
+             if delete_branch is not None and not self.settings.demo else await self.source.repo_view(name))
         if self.settings.demo:
             return v
         cfg = self.autodeploy.get(name)
@@ -46,6 +47,13 @@ class Service:
             {c.sha for c in v.main_commits},
         )
         mark_origin_lag(v)
+        if delete_branch is not None:
+            work = await asyncio.to_thread(read_branch_work, self.settings.lab_git_dir / name,
+                                           delete_branch, heads.get(delete_branch, ""))
+            if work is None:
+                v.merge_evidence_errors[delete_branch] = "作業台の対象分岐を確認できません。状態を確認してから読み直してください。"
+            else:
+                v.local.checked_branch_work[delete_branch] = work
         return v
 
     async def views(self) -> list[RepoView]:

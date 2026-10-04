@@ -83,3 +83,11 @@ def test_local_only_dirty_branch_is_retained(merged_view):
     v.local.branches = [LocalBranch('new-work', v.local.dev_head)]
     assert any(h['part'] == 'local:new-work' for h in layout(v).hits)
     assert any(t['t'] == '作業台のみ · 未コミット 2' for t in layout(v).texts)
+
+
+def test_zero_ahead_does_not_turn_an_old_same_name_pr_into_current_evidence(merged_view):
+    v = merged_view
+    v.branches[0].sha, v.branches[0].ahead = 'different-head-already-on-main', 0
+    assert v.merged_for('work') is None and not v.completed_branch('work')
+    assert sum(r['name'] == 'work' for r in rows(v)) == 1
+    assert not next(r for r in rows(v) if r['name'] == 'work').get('merged')

@@ -70,7 +70,7 @@ def read_local_state(
         # GitHub から受け取るのは表示する分岐（最大 8 本）だけなので、足りない分は手元の origin/* で補う
         origin = _origin_heads(dev)
         heads = {**origin, **(remote_heads or {})}
-        for b in _local_branches(dev, heads, default_branch, st.dev_branch, known):
+        for b in _local_branches(dev, heads, default_branch, st.dev_branch, known, tuple(remote_heads or ())):
             if b.name == st.dev_branch:
                 st.dev_unpushed = b.unpushed
             if b.name != default_branch:
@@ -113,7 +113,7 @@ def _origin_heads(dev: Path) -> dict[str, str]:
     return dict(line.split("\0", 1) for line in out.splitlines() if "\0" in line and not line.startswith("HEAD\0"))
 
 
-def _local_branches(dev: Path, heads: dict[str, str], default: str, current: str, known: frozenset[str] = frozenset()) -> list[LocalBranch]:
+def _local_branches(dev: Path, heads: dict[str, str], default: str, current: str, known: frozenset[str] = frozenset(), required: tuple[str, ...] = ()) -> list[LocalBranch]:
     fmt = "--format=%(refname:short)%00%(objectname)"
     base = f"origin/{default}"
     # 幹線に入りきった分岐は工程が終わっているので読まない（今いる分岐と既定分岐は必ず読む）
@@ -121,16 +121,60 @@ def _local_branches(dev: Path, heads: dict[str, str], default: str, current: str
     if out is None:
         out = _git(dev, "for-each-ref", "refs/heads", "--sort=-committerdate", fmt) or ""
     refs = [line.split("\0", 1) for line in out.splitlines() if "\0" in line]
+    active_refs = {n for n, _ in refs}
     names = [n for n, _ in refs][:MAX_LOCAL_BRANCHES]
     all_refs = dict(refs)
-    for must in (current, default):
+    for must in (current, default, *required):
         if must and must not in all_refs:
             sha = _git(dev, "rev-parse", "--verify", "--quiet", f"refs/heads/{must}")
             if sha:
                 all_refs[must] = sha
         if must in all_refs and must not in names:
             names.append(must)
-    return [_local_branch(dev, n, all_refs[n], heads.get(n), base, known) for n in names]
+    branches = [_local_branch(dev, n, all_refs[n], heads.get(n), base, known) for n in names]
+    return [b for b in branches if b.name in active_refs or b.name in (current, default) or b.unpushed]
+
+
+def read_branch_work(dev: Path, name: str, remote_sha: str) -> bool | None:
+    """撤去対象を上限外でも個別照合する。取得失敗は0件にせずNone。"""
+    if not dev.exists():
+        return False  # 作業台自体が無い
+    if not (dev / '.git').exists():
+        return None
+    status = _git(dev, '--no-optional-locks', 'status', '--porcelain=v1', '-b')
+    refs = _git(dev, 'for-each-ref', 'refs/heads', '--format=%(refname:short)%00%(objectname)')
+    if status is None or refs is None:
+        return None
+    lines = status.splitlines()
+    if not lines or not lines[0].startswith('## '):
+        return None
+    current = lines[0][3:].split('...')[0].split(' ')[0]
+    if current == name and any(ln.strip() for ln in lines[1:]):
+        return True
+    # 同じ分岐を別の作業場所で開いている場合も、未コミットを見落とさない。
+    from .worktrees import parse_worktrees
+
+    registered = _git(dev, 'worktree', 'list', '--porcelain', '-z')
+    if registered is None or not registered.endswith('\0\0'):
+        return None
+    locations = parse_worktrees(registered)
+    if not locations:
+        return None
+    for row in locations:
+        if row.branch != name or Path(row.path).resolve() == dev.resolve():
+            continue
+        other = _git(Path(row.path), '--no-optional-locks', 'status', '--porcelain=v1', '-b')
+        if other is None or not other.startswith('## ') or other.splitlines()[0][3:].split('...')[0].split(' ')[0] != name:
+            return None
+        if any(ln.strip() for ln in other.splitlines()[1:]):
+            return True
+    head = dict(ln.split('\0', 1) for ln in refs.splitlines() if '\0' in ln).get(name)
+    if not head or head == remote_sha:
+        return False
+    counts = _git(dev, 'rev-list', '--left-right', '--count', f'{remote_sha}...{head}')
+    if counts is None or len(counts.split()) != 2 or not all(c.isdigit() for c in counts.split()):
+        return None
+    return int(counts.split()[1]) > 0
 
 
 MAX_UNPUSHED_LIST = 2000

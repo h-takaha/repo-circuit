@@ -243,3 +243,41 @@ def test_a_local_only_branch_whose_commits_are_in_github_main_leaves_the_pipelin
 
     assert "local-only" in names(None)
     assert "local-only" not in names(set(lo))
+
+
+def test_displayed_github_target_is_read_even_outside_local_branch_limit(lab, monkeypatch):
+    import app.localgit as lg
+
+    root, heads, _, _ = _shas(lab)
+    monkeypatch.setattr(lg, 'MAX_LOCAL_BRANCHES', 0)
+    st = read_local_state(root / 'git', root / 'run', 'tool', remote_heads={**heads, 'local-only': heads['main']})
+    assert next(b for b in st.branches if b.name == 'local-only').unpushed == 2
+
+
+def test_targeted_read_detects_noncurrent_unpushed_work_and_dirty_current_branch(lab):
+    from app.localgit import read_branch_work
+
+    root, heads, _, _ = _shas(lab)
+    dev = root / 'git' / 'tool'
+    assert read_branch_work(dev, 'feat', heads['feat']) is True
+    assert read_branch_work(dev, 'local-only', git(dev, 'rev-parse', 'HEAD')) is True
+    assert read_branch_work(dev, 'missing', heads['main']) is False
+
+
+@pytest.mark.parametrize('failed', ['status', 'for-each-ref', 'rev-list', 'worktree'])
+def test_targeted_read_failures_are_unknown(lab, monkeypatch, failed):
+    import app.localgit as lg
+
+    root, heads, _, _ = _shas(lab)
+    actual = lg._git
+    monkeypatch.setattr(lg, '_git', lambda cwd, *args: None if failed in args else actual(cwd, *args))
+    assert lg.read_branch_work(root / 'git' / 'tool', 'local-only', heads['main']) is None
+
+
+def test_targeted_read_keeps_dirty_linked_worktree(lab):
+    from app.localgit import read_branch_work
+
+    root, heads, dev = _tidy_lab(lab)
+    assert read_branch_work(dev, 'busy', heads['main']) is False
+    (root / 'wt' / 'new.txt').write_text('work in progress', encoding='utf-8')
+    assert read_branch_work(dev, 'busy', heads['main']) is True
