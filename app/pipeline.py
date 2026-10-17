@@ -124,8 +124,8 @@ def _branch_row(view: RepoView, name: str) -> dict | None:
             st["merge"] = _stage("bad", "ショート")
             nxt = nxt or "ショート（コンフリクト）を解消する"
         elif pr.ci in ("success", "none") and not pr.draft:
-            st["merge"] = _stage("todo", "閉じられる")
-            nxt = nxt or f"スイッチ #{pr.number} を閉じる（マージ）"
+            st["merge"] = _stage("todo", "合流候補")
+            nxt = nxt or f"スイッチ #{pr.number} の変更内容を確認して合流する（マージ）"
         else:
             nxt = nxt or {"failure": "検査ランプの失敗ログを見て、分岐に修正をはんだ付けする",
                           "pending": "検査が終わるのを待つ",

@@ -1,9 +1,28 @@
 {% extends "base.html" %}
 {% block title %}凡例 · repo-circuit{% endblock %}
 {% block content %}
+{% if showcase %}
+<section class="card wt-intro">
+  <h1>はじめの回路で使う言葉</h1>
+  <p class="ds">practice-board は架空の回路です。変更提案と検査結果を用意してあり、実際のテストや本番更新は行いません。操作はメモリ上で再現し、再起動すると初期状態へ戻ります。</p>
+  <table class="rules">
+    <thead><tr><th>回路の部品</th><th>GitHubの言葉</th><th>意味</th></tr></thead>
+    <tbody>
+      <tr><td>幹線</td><td>main</td><td>変更を合流する本線</td></tr>
+      <tr><td>分岐配線・はんだ点</td><td>ブランチ・コミット</td><td>作業用の分岐と、記録した変更</td></tr>
+      <tr><td>スイッチ</td><td>プルリクエスト（PR）</td><td>変更を幹線へ取り込む提案</td></tr>
+      <tr><td>検査ランプ</td><td>CIの結果</td><td>合格か失敗かを見る。合格だけで安全を保証しない</td></tr>
+      <tr><td>スイッチを閉じるという比喩</td><td>合流（マージ）</td><td>幹線への取り込み。本番反映（デプロイ）は別の段階</td></tr>
+    </tbody>
+  </table>
+  <p class="ds">GitHubの <b>Close pull request</b> は、合流せずに提案を閉じる別の操作です。<a href="https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/closing-a-pull-request" target="_blank" rel="noopener">GitHub公式の説明 ↗</a></p>
+  <p class="ds">次の体験: <a href="/repo/practice-details">詳しい状態の回路</a>で、未送電・本番の位置・作業場所を確認できます。そこに表示するパスやファイルも例示です。</p>
+</section>
+<details class="card demo-intro"><summary>詳しい凡例と運用の案内</summary>
+{% endif %}
 <div>
-  <h1>凡例 — 回路記号と GitHub の対応</h1>
-  <p class="lead">覚えるのは1つだけ: <b>電気が本番ランプまで流れる＝あなたの変更が本番のツールに届く</b>。</p>
+  <h2>凡例 — 回路記号と GitHub の対応</h2>
+  <p class="lead"><b>合流は幹線への取り込み、本番反映（デプロイ）は別の段階です。</b> 到達した版と、実際の本番画面を確認します。</p>
 </div>
 <div class="card flowline">
   <div class="step"><span class="stepn">1</span><span class="nm">付箋を貼る</span><span class="ds">「直したい」を IC チップにする<br>= Issue 作成</span></div>
@@ -11,7 +30,8 @@
   <div class="step"><span class="stepn">3</span><span class="nm">はんだ付け</span><span class="ds">作業台で直して記録し、GitHub へ送る<br>= コミット・push</span></div>
   <div class="step"><span class="stepn">4</span><span class="nm">スイッチを付ける</span><span class="ds">「幹線に入れて」と依頼する<br>= プルリクエスト</span></div>
   <div class="step"><span class="stepn">5</span><span class="nm">ランプを見る</span><span class="ds">自動検査が緑になるのを待つ<br>= CI</span></div>
-  <div class="step"><span class="stepn">6</span><span class="nm">スイッチを閉じる</span><span class="ds">通電・付箋が自動で完了<br>= マージ</span></div>
+  <div class="step"><span class="stepn">6</span><span class="nm">合流する</span><span class="ds">幹線へ取り込む。Fixesで結んだ付箋が完了<br>= マージ</span></div>
+  <div class="step"><span class="stepn">7</span><span class="nm">本番を確認する</span><span class="ds">別の配布処理による到達と画面を確認<br>= デプロイの確認</span></div>
 </div>
 
 <section class="card" style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
@@ -40,7 +60,7 @@
       <tr><td>送電</td><td>push</td><td class="ds">作業台の分岐が GitHub の分岐より進んでいる数。「作業台のみ」はまだ一度も送っていない分岐。「GitHub が先行」は GitHub 側に作業台に無い変更がある（このアプリは fetch しない）</td></tr>
       <tr><td>スイッチ</td><td>プルリクエスト</td><td class="ds">GitHub にスイッチが付いているか</td></tr>
       <tr><td>検査</td><td>CI</td><td class="ds">検査ランプの色</td></tr>
-      <tr><td>合流</td><td>マージ</td><td class="ds">「閉じられる」ならスイッチを閉じてよい。合流済みは現在残る完了分岐と直近の記録を表示。古い記録も先端を照合し、取得できないときは「取得不可」</td></tr>
+      <tr><td>合流</td><td>マージ</td><td class="ds">「合流候補」は、変更内容と動作を確認してから合流する段階。合流済みは現在残る完了分岐と直近の記録を表示。古い記録も先端を照合し、取得できないときは「取得不可」</td></tr>
       <tr><td>本番</td><td>デプロイ</td><td class="ds">合流でできたはんだ点に、本番マーカーが追いついたか</td></tr>
     </tbody>
   </table>
@@ -75,9 +95,9 @@
   <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="bus" d="M8 12H88"></path><path class="w" d="M20 12V36H76V12"></path></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">分岐配線</span><span class="gh">ブランチ</span></div><div class="ds">幹線から引き出した作業用の配線。何をしても本番には影響しない。</div></div></div>
   <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="w" d="M8 24H88"></path><circle class="commit" cx="32" cy="24" r="6"></circle><circle class="commit" cx="64" cy="24" r="6"></circle></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">はんだ点</span><span class="gh">コミット</span></div><div class="ds">変更を記録したセーブポイント。消えない。いつでも戻れる。</div></div></div>
   <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="w" d="M4 24H92"></path><rect x="24" y="12" width="48" height="24" rx="3" class="chipr"></rect><text x="48" y="29" class="chiptxt">#12</text></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">IC チップ（付箋）</span><span class="gh">Issue</span></div><div class="ds">「直したい」メモ。トレイにあれば未着手、分岐に刺さっていれば対応中。</div></div></div>
-  <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="w" d="M4 30H36M60 30H92"></path><circle class="contact" cx="36" cy="30" r="4"></circle><line x1="36" y1="30" x2="56" y2="14" class="blade"></line><circle class="contact" cx="60" cy="30" r="4"></circle></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">スイッチ</span><span class="gh">プルリクエスト / マージ</span></div><div class="ds">開いている＝合流の依頼中。閉じる＝マージ。閉じると幹線に電気が流れる。</div></div></div>
-  <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><circle class="led-g" cx="24" cy="24" r="9"></circle><circle class="led-y" cx="48" cy="24" r="9"></circle><circle class="led-r" cx="72" cy="24" r="9"></circle></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">検査ランプ</span><span class="gh">CI（自動チェック）</span></div><div class="ds">緑=合格、黄=検査中、赤=失敗。赤と黄のスイッチは閉じられない。灰色で「取得不可」=検査結果を読めない状態。検査なしとは異なり、アプリからは閉じられない。</div></div></div>
-  <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="bus" d="M4 24H26"></path><circle class="lamp on" cx="48" cy="24" r="18"></circle><path class="fil" d="M38 14L58 34M58 14L38 34"></path></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">本番ランプ</span><span class="gh">デプロイ先 C:\lab\run</span></div><div class="ds">いま動いているツール。自動デプロイ対象は、合流すると数分で更新される。</div></div></div>
+  <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="w" d="M4 30H36M60 30H92"></path><circle class="contact" cx="36" cy="30" r="4"></circle><line x1="36" y1="30" x2="56" y2="14" class="blade"></line><circle class="contact" cx="60" cy="30" r="4"></circle></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">スイッチ</span><span class="gh">プルリクエスト / マージ</span></div><div class="ds">開いている＝変更の提案中。回路で閉じる＝合流の比喩。GitHubの Close pull request は合流せずに閉じる別の操作。</div></div></div>
+  <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><circle class="led-g" cx="24" cy="24" r="9"></circle><circle class="led-y" cx="48" cy="24" r="9"></circle><circle class="led-r" cx="72" cy="24" r="9"></circle></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">検査ランプ</span><span class="gh">CI（自動チェック）</span></div><div class="ds">緑=合格、黄=検査中、赤=失敗。合格は安全の保証ではない。赤・黄・取得不可では合流を止める。取得不可は検査なしとは異なる。</div></div></div>
+  <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="bus" d="M4 24H26"></path><circle class="lamp on" cx="48" cy="24" r="18"></circle><path class="fil" d="M38 14L58 34M58 14L38 34"></path></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">本番ランプ</span><span class="gh">デプロイ先 C:\lab\run</span></div><div class="ds">いま動いているツール。幹線への合流後、別の配布処理が反映する。到達した版と実際の画面を確認する。</div></div></div>
   <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="bus" d="M4 30H92"></path><path class="mark-run" d="M41 6H55L48 18Z"></path><path class="dev" d="M60 30L70 12H92"></path></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">旗（本番・作業台）</span><span class="gh">稼働クローン / 開発リポジトリ</span></div><div class="ds">本番と作業台の実際のコミット位置を示す。未送電が0でも作業台の旗を出し、本番と同じ位置なら上下に分ける。表示範囲外は位置を断定せず、その旨とコミット番号を示す。</div></div></div>
   <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="bus" d="M8 12H88"></path><path class="dev" d="M20 12V36H76"></path><circle class="commit-dev" cx="48" cy="36" r="6"></circle></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">点線の分岐・はんだ点</span><span class="gh">未 push のブランチ / コミット</span></div><div class="ds">作業台（この PC）にだけあって、まだ GitHub に送っていない分岐やはんだ点。送るまでは GitHub にも本番にも無い。</div></div></div>
   <div class="card lg"><svg viewBox="0 0 96 48" aria-hidden="true"><path class="rust" d="M8 24H88"></path></svg><div><div style="display:flex;gap:8px;align-items:center"><span class="nm">錆びた配線</span><span class="gh">放置ブランチ</span></div><div class="ds">長く手が付いていない分岐。合流するか、要らないか判断しよう。</div></div></div>
@@ -111,4 +131,5 @@
   <span class="ds">作業台・本番フォルダへの書き込み … 本番の反映は自動デプロイの仕組みに任せ、アプリは読むだけにしているため</span>
   <span class="ds">repo の削除・公開範囲や設定の変更 … 影響が大きく、GitHub の画面で慎重に行うべきため</span>
 </section>
+{% if showcase %}</details>{% endif %}
 {% endblock %}

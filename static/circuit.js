@@ -4,6 +4,8 @@
   const parts = JSON.parse(document.getElementById('parts-data').textContent);
   const panel = document.getElementById('panel');
   const csrf = document.querySelector('meta[name="csrf-token"]').content;
+  const showcase = document.body.dataset.showcase === 'true';
+  const introDemo = document.body.dataset.introDemo === 'true';
   const breaker = document.getElementById('breaker');
   const breakerText = document.getElementById('breaker-text');
   let current = null;
@@ -41,8 +43,8 @@
         el('div', { class: 'act-label' }, a.label),
         el('div', { class: 'act-btns' },
           a.terminal ? null : el('button', { type: 'button', class: 'btn' + (a.danger ? ' danger' : ''), onclick: () => prepare(a, 'tool') }, 'ツールから実行'),
-          el('button', { type: 'button', class: 'btn ghost', onclick: () => (a.workbench ? prepareWorkbench(a) : a.terminal ? copyAndReport(a.cmd) : prepare(a, 'terminal')) }, a.workbench ? 'コマンドの案内へ' : 'ターミナルから実行')),
-        cmdBlock(a.cmd))));
+          introDemo ? null : el('button', { type: 'button', class: 'btn ghost', onclick: () => (a.workbench ? prepareWorkbench(a) : a.terminal ? copyAndReport(a.cmd) : prepare(a, 'terminal')) }, a.workbench ? 'コマンドの案内へ' : 'ターミナルから実行')),
+        introDemo ? null : cmdBlock(a.cmd))));
   }
 
   // 「ターミナルから実行」: コマンドをコピーするだけ。アプリは実行しない（作業台にも GitHub にも触れない）
@@ -238,7 +240,7 @@
         el('p', {}, v.why),
         v.steps.length ? el('div', { class: 'kicker' }, '代わりにやること') : null,
         v.steps.length ? el('ol', {}, v.steps.map((s) => el('li', {}, s))) : null,
-        cmdBlock(v.cmd))),
+        introDemo ? null : cmdBlock(v.cmd))),
       el('button', { type: 'button', class: 'btn ghost', onclick: () => show(current) }, 'わかった（ブレーカーを戻す）'),
     );
   }
@@ -254,7 +256,8 @@
     setPanel(
       el('div', { class: 'kicker' }, '操作の確認'),
       el('h2', {}, res.label),
-      el('div', { style: 'font-size:14px;font-weight:700' }, terminal ? 'ターミナルで実行すると起きること' : 'この操作で起きること'),
+      showcase ? el('p', { class: 'flash demo-notice' }, '練習用の操作です。以下は実運用での影響と注意です。このデモではGitHubや本番を変更しません。') : null,
+      el('div', { style: 'font-size:14px;font-weight:700' }, showcase ? '実運用で同じ操作をした場合' : terminal ? 'ターミナルで実行すると起きること' : 'この操作で起きること'),
       el('ul', {}, res.preview.map((t) => el('li', {}, t))),
       ...warns.map((v) => el('div', { class: 'guard warn' },
         el('div', { class: 'gt' }, '▲ 注意 — ' + v.rule),
@@ -263,7 +266,7 @@
       ack ? el('label', { class: 'ack', for: 'ack' }, ack, '注意を読んで理解した') : null,
       el('div', { style: 'display:flex;gap:8px' }, go,
         el('button', { type: 'button', class: 'btn ghost', onclick: () => show(current) }, 'やめる')),
-      cmdBlock(res.cmd),
+      introDemo ? null : cmdBlock(res.cmd),
     );
   }
 
@@ -273,7 +276,8 @@
     if (res.tripped) return showTrip(res);
     if (!res.ok) return showError(res.message || res.detail);
     const done = () => {
-      const q = new URLSearchParams({ msg: res.message, sel: current || '' });
+      const message = showcase ? res.message + '（デモ内の擬似操作です。本番への反映はありません）' : res.message;
+      const q = new URLSearchParams({ msg: message, sel: current || '' });
       if (res.url) q.set('url', res.url);
       location.href = location.pathname + '?' + q.toString();
     };
@@ -283,8 +287,8 @@
       if (blade) { blade.setAttribute('x2', blade.dataset.cx); blade.setAttribute('y2', blade.dataset.cy); }
       const flow = document.getElementById('flow-' + n);
       if (flow) flow.classList.add('go');
-      setTimeout(() => document.getElementById('lamp').classList.add('on'), 600);
-      setPanel(el('div', { class: 'kicker' }, 'いま何が起きた？'), el('h2', {}, '通電しました'),
+      setPanel(el('div', { class: 'kicker' }, 'いま何が起きた？'), el('h2', {}, showcase ? '練習用の合流が完了しました' : '幹線への合流が完了しました'),
+        showcase ? el('p', { class: 'flash demo-notice' }, 'デモ内の幹線と付箋を更新しました。GitHubや本番への反映はありません。以下は実運用での影響です。') : null,
         el('ul', {}, res.preview.map((t) => el('li', {}, t))));
       setTimeout(done, 2200);
     } else {

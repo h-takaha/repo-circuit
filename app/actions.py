@@ -79,10 +79,10 @@ def preview(action: str, p: dict, view: RepoView) -> list[str]:
     if action == "delete_branch":
         return [f"分岐 {p['name']} が GitHub から撤去されます"]
     if action == "create_pr":
-        return [f"分岐 {p['head']} の戻り口にスイッチ（プルリクエスト）が付きます", "自動チェック（CI）が走り、検査ランプが点きます"]
+        return [f"分岐 {p['head']} の戻り口にスイッチ（プルリクエスト）が付きます", "自動チェック（CI）は設定された条件で実行されます。検査ランプで結果を確認してください"]
     if action == "merge_pr":
         pr = next((x for x in view.pulls if x.number == p["number"]), None)
-        lines = [f"スイッチ #{p['number']} が閉じ、分岐のはんだ点が幹線に入ります（マージ）",
+        lines = [f"スイッチ #{p['number']} の変更を幹線に取り込みます（マージ）",
                  f"確認した先端のはんだ点（head SHA）: {p['expected_head_sha']} ／ 合流先: {p['expected_base']}"]
         if pr:
             from .issues import linked_issue
@@ -91,11 +91,12 @@ def preview(action: str, p: dict, view: RepoView) -> list[str]:
             if n:
                 lines.append(f"説明文の「Fixes #{n}」により、付箋 #{n} が自動で完了になります")
         if view.autodeploy:
-            lines.append("自動デプロイで、数分以内に本番が新しい版に更新されます")
+            lines.append("合流後、別の自動デプロイ処理が本番への反映を試みます。到達と実際の画面を確認してください")
+        lines.append("幹線への合流と、本番反映（デプロイ）は別の段階です")
         lines.append("取り消したいときは、逆向きの変更（revert）で戻せます")
         return lines
     if action == "close_pr":
-        return [f"スイッチ #{p['number']} を外します（合流せずに閉じる）", "分岐とはんだ点はそのまま残ります"]
+        return [f"スイッチ #{p['number']} の提案を合流せずに閉じます（Close pull request）", "分岐とはんだ点はそのまま残ります"]
     if action == "rerun_ci":
         return [f"スイッチ #{p['number']} の失敗した検査をやり直します"]
     return []
@@ -199,7 +200,7 @@ class Actions:
                 src.invalidate(repo)
                 return {**result, "ok": False, "message": "GitHub で合流が完了していません。状態を確認してください"}
             merge_commit_sha = merged.get("sha") or ""
-            message = f"スイッチ #{p['number']} を閉じました。通電しました"
+            message = f"スイッチ #{p['number']} の変更を幹線に合流しました。本番反映は別途確認してください"
         elif action == "close_pr":
             await src.close_pr(repo, p["number"])
             message = f"スイッチ #{p['number']} を外しました"

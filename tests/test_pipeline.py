@@ -26,7 +26,7 @@ def test_rows_follow_each_branch_from_commit_to_production():
 
     btn = _row(rs, "fix/12-button-size")
     assert btn["commit"] == ("ok", "済") and btn["push"] == ("todo", "未送電 1")
-    assert btn["merge"] == ("todo", "閉じられる")
+    assert btn["merge"] == ("todo", "合流候補")
     assert "git push" in btn["_next"]
 
     idea = _row(rs, "exp/local-idea")

@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ asset('style.css') }}">
 </head>
-<body>
+<body{% if showcase %} data-showcase="true"{% endif %}{% if intro_demo %} data-intro-demo="true"{% endif %}>
 <header class="top">
   <a class="brand" href="/">
     <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><path class="ico" d="M2 14H8M20 14H26M8 14L18 7"></path><circle class="ico" cx="8" cy="14" r="2"></circle><circle class="ico" cx="20" cy="14" r="2"></circle></svg>
@@ -18,12 +18,18 @@
   <nav class="tabs" aria-label="画面">
     <a class="tab {{ 'on' if active == 'panel' }}" href="/">配電盤</a>
     <a class="tab {{ 'on' if active == 'circuit' }}" href="/repo">回路図</a>
-    <a class="tab {{ 'on' if active == 'tray' }}" href="/tray">部品トレイ</a>
+    {% if not showcase %}<a class="tab {{ 'on' if active == 'tray' }}" href="/tray">部品トレイ</a>{% endif %}
     <a class="tab {{ 'on' if active == 'guide' }}" href="/guide">凡例</a>
   </nav>
   <div class="who">{% if demo %}<span class="demo-badge">デモデータ</span> {% endif %}{{ owner }}</div>
 </header>
 <main class="page">
+{% if showcase %}
+<aside class="flash demo-notice" aria-label="デモについて">
+  <strong>練習用デモ</strong> · 架空のデータです。「ツールから実行」はこのデモ内だけを変更します。GitHubや本番への反映はありません。
+  <a href="/#demo-start">試し方</a>
+</aside>
+{% endif %}
 {% block content %}{% endblock %}
 </main>
 {% block scripts %}{% endblock %}

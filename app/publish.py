@@ -57,8 +57,8 @@ def guide(view: RepoView, state: dict) -> dict:
         if pr.draft or pr.ci not in ("success", "none") or pr.mergeable_state == "dirty":
             out["url"] = pr.url
             return phase("check", "5. 検査ランプを確認する。検査中・失敗・取得不可、下書き、ショートがある場合は先に解消してください。解消したら状態を読み直します。")
-        return phase("merge", "6. スイッチを閉じる（マージ）。合流先と先端、検査を確認します。自動配布対象では合流後に本番が更新されるため、確認画面の注意も読んでください。",
-                     [_act("merge_pr", "スイッチを閉じる（マージ）", view.name, number=pr.number,
+        return phase("merge", "6. 合流する（マージ）。合流先と先端、検査と変更内容を確認します。本番反映は別の段階です。自動配布対象では別の処理で更新・再起動される場合があるため、確認画面の注意も読んでください。",
+                     [_act("merge_pr", "合流する（マージ）", view.name, number=pr.number,
                            expected_head_sha=pr.head_sha, expected_base=pr.base)])
     merged = view.merged_for(branch)
     if merged and merged.head_sha == state["head"]:

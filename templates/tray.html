@@ -5,7 +5,7 @@
   <section style="flex-grow:1;display:flex;flex-direction:column;gap:14px;min-width:0">
     <div>
       <h1>部品トレイ</h1>
-      <p class="lead">「直したい」と思ったことを付箋（IC チップ）にして置いておく場所。分岐に差し込むと「配線中」、スイッチが閉じると自動で「完了」に移ります。</p>
+      <p class="lead">「直したい」と思ったことを付箋（IC チップ）にして置いておく場所。分岐に差し込むと「配線中」、PRの説明で Fixes #番号 を指定して合流すると自動で「完了」に移ります。</p>
     </div>
     <form method="get" action="/tray" style="display:flex;gap:8px;align-items:center">
       <label class="lab" for="filter">表示</label>
@@ -16,7 +16,7 @@
       <noscript><button class="btn ghost">絞り込む</button></noscript>
     </form>
     <div class="tcols">
-      {% for key, name, hint in [('unwired','未接続','どの分岐にもつながっていない（未着手）'), ('wired','配線中','分岐に差し込まれ、修正中（対応中）'), ('done','完了','スイッチが閉じて合流した（クローズ）')] %}
+      {% for key, name, hint in [('unwired','未接続','どの分岐にもつながっていない（未着手）'), ('wired','配線中','分岐に差し込まれ、修正中（対応中）'), ('done','完了','完了として閉じた付箋（Issue）')] %}
       <div class="tcol">
         <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:17px;font-weight:700">{{ name }}</span><span class="mono cap" style="font-size:14px">{{ cols[key]|length }}</span></div>
         <div class="cap" style="margin-top:-6px">{{ hint }}</div>

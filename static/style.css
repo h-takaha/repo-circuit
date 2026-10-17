@@ -56,6 +56,11 @@ code.cmd{font-family:'IBM Plex Mono',monospace;font-size:12.5px;background:var(-
 .flash{border-radius:8px;padding:12px 14px;font-size:14px;line-height:1.6}
 .flash.ok{background:var(--green-bg);border:2px solid var(--green);color:var(--ink)}
 .flash.ng{background:var(--red-bg);border:2px solid var(--red-d);color:var(--ink)}
+.demo-notice{background:var(--yellow-bg);border:1px solid var(--yellow);overflow-wrap:anywhere}
+.demo-notice a{font-weight:700;margin-left:8px}
+.demo-intro{padding:20px;display:flex;flex-direction:column;gap:12px}
+.demo-intro ol{margin:0;padding-left:24px;line-height:1.8}
+.demo-intro li+li{margin-top:8px}
 
 /* ---- 配電盤 ---- */
 .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
@@ -234,7 +239,7 @@ svg .tripping{animation:blink .5s steps(2) infinite;stroke:var(--red)!important}
 .pills input:focus-visible+label{outline:3px solid var(--blue);outline-offset:2px}
 
 /* ---- 凡例 ---- */
-.flowline{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px;padding:16px 20px;border:2px solid var(--ink)}
+.flowline{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:16px;padding:16px 20px;border:2px solid var(--ink)}
 .step{display:flex;flex-direction:column;gap:4px}
 .stepn{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:var(--copper)}
 .legend{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}

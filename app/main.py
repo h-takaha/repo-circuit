@@ -72,7 +72,8 @@ def create_app(settings: Settings | None = None, source=None) -> FastAPI:
     def asset(name: str) -> str:
         return f"/static/{name}?v={asset_versions.get(name, '0')}"
 
-    templates.env.globals.update(csrf=csrf, demo=settings.demo, owner=settings.owner, kinds=KINDS, priorities=PRIORITIES, asset=asset)
+    templates.env.globals.update(csrf=csrf, demo=settings.demo, showcase=getattr(source, "showcase", False),
+                                 owner=settings.owner, kinds=KINDS, priorities=PRIORITIES, asset=asset)
 
     def render(request: Request, name: str, **ctx) -> HTMLResponse:
         return templates.TemplateResponse(request, name, ctx)
@@ -122,7 +123,13 @@ def create_app(settings: Settings | None = None, source=None) -> FastAPI:
             chips.append({"number": i.number, "title": i.title, "state": state, "part": f"issue:{i.number}"})
         order = {"wired": 0, "unwired": 1, "done": 2}
         chips.sort(key=lambda c: (order[c["state"]], c["number"]))
-        return render(request, "circuit.html", view=view, scene=layout(view), parts=parts(view), status=status_text(view),
+        intro_demo = getattr(source, "showcase", False) and name == "practice-board"
+        part_data = parts(view)
+        if intro_demo:
+            for part in part_data.values():
+                part["actions"] = [a for a in part.get("actions", []) if a.get("action") == "merge_pr"]
+        return render(request, "circuit.html", view=view, scene=layout(view, show_runtime=not intro_demo),
+                      parts=part_data, status=status_text(view), intro_demo=intro_demo,
                       chips=chips[:12], names=names, pipeline=pipeline_rows(view), stages=STAGES, active="circuit",
                       repo_name=name, repo_url=view.url or None, repo_tab="circuit")
 
