@@ -57,10 +57,10 @@ def _pr(repo: str, n: int, title: str, head: str, sha: str, ci: str, fixes: int 
     )
 
 
-def build_demo() -> dict[str, RepoView]:
+def build_demo(primary_repo: str = "event-calendar") -> dict[str, RepoView]:
     views: dict[str, RepoView] = {}
 
-    r = "event-calendar"
+    r = primary_repo
     main = _commits(r, "main", ["初期構成", "スクレイパーを分離", "祝日を反映 (#11)", "日付の表示を修正", "依存を更新", "ログ出力を整理"], 40)
     views[r] = RepoView(
         name=r, default_branch="main", main_commits=main,
@@ -165,12 +165,40 @@ def build_demo() -> dict[str, RepoView]:
     return views
 
 
+def build_intro() -> RepoView:
+    """最初の体験は提案済みの2変更と、用意済みの検査結果だけに絞る。"""
+    r = "practice-board"
+    main = _commits(r, "main", ["初期構成"], 1)
+    button = _branch(r, "fix/12-button-size", main[-1], ["追加ボタンを大きくする"], 0, 0)
+    csv = _branch(r, "fix/14-csv-encoding", main[-1], ["CSV の文字化けを直す"], 0, 0)
+    return RepoView(
+        name=r, default_branch="main", main_commits=main, branches=[button, csv],
+        pulls=[_pr(r, 5, "追加ボタンを押しやすくする", button.name, button.sha, "success", 12),
+               _pr(r, 6, "CSV の文字化けを直す", csv.name, csv.sha, "failure", 14)],
+        issues=[_issue(r, 12, "追加ボタンが小さくて押しにくい", "improvement", "p2"),
+                _issue(r, 14, "CSV 出力が文字化けする", "bug", "p1")],
+        local=LocalState(), autodeploy=False,
+    )
+
+
 class DemoSource:
     """GitHubSource と同じ口を持つ、メモリ上の擬似 GitHub。"""
 
-    def __init__(self) -> None:
-        self.views = build_demo()
+    def __init__(self, *, showcase: bool = False) -> None:
+        self.showcase = showcase
+        self.views = build_demo("practice-details" if showcase else "event-calendar")
+        if showcase:
+            details = self.views["practice-details"]
+            self.views = {"practice-board": build_intro(), details.name: details}
+            # 紹介用は架空の回路だけに限定する。新規作成分も実在repoへリンクさせない。
+            for view in self.views.values():
+                view.url = ""
+                for item in view.issues + view.pulls + view.closed_pulls:
+                    item.url = ""
         self.comments: list[tuple[str, int, str]] = []
+
+    def _url(self, repo: str, suffix: str) -> str:
+        return "" if self.showcase else f"https://github.com/h-takaha/{repo}/{suffix}"
 
     def invalidate(self, repo: str | None = None) -> None:  # キャッシュは無い
         return None
@@ -209,7 +237,7 @@ class DemoSource:
                                           v.head_sha, "デモ", "demo", notes=["例示用の証拠です。"])
             if state == "receipt_only":
                 row.integration.pull = PullRequest(99, "作業完了の例", "", branch, v.default_branch,
-                    "closed", True, False, head, "none", "unknown", f"{v.url}/pull/99", _sha("demo-merge"), v.head_sha)
+                    "closed", True, False, head, "none", "unknown", self._url(name, "pull/99"), _sha("demo-merge"), v.head_sha)
             _guidance(row)
             snapshot.rows.append(row)
         snapshot.rows = snapshot.rows[:1] + sorted(snapshot.rows[1:], key=lambda row: row.path.casefold())
@@ -223,7 +251,7 @@ class DemoSource:
         numbers = [i.number for i in v.issues] + [p.number for p in v.pulls + v.closed_pulls]
         n = max(numbers, default=0) + 1
         issue = Issue(repo=repo, number=n, title=title, body=body, state="open", labels=labels, created_at=now(),
-                      url=f"https://github.com/h-takaha/{repo}/issues/{n}")
+                      url=self._url(repo, f"issues/{n}"))
         v.issues.insert(0, issue)
         return {"number": n, "html_url": issue.url}
 
@@ -253,7 +281,7 @@ class DemoSource:
         n = max(numbers, default=0) + 1
         b = v.branch(head)
         v.pulls.append(PullRequest(n, title, body, head, base, "open", False, False, b.sha if b else "", "success", "clean",
-                                   url=f"https://github.com/h-takaha/{repo}/pull/{n}"))
+                                   url=self._url(repo, f"pull/{n}")))
         return {"number": n, "html_url": v.pulls[-1].url}
 
     async def pull_for_merge(self, repo: str, number: int) -> PullRequest | None:

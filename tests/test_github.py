@@ -82,7 +82,7 @@ def _check_pages_and_merge(settings, router):
         tray = client.get("/tray?repo=agent-ops")
         assert tray.status_code == 200 and "取得不可" in tray.text
         guide = client.get("/guide").text
-        assert "検査ランプが取得不可のスイッチは閉じられません" in guide
+        assert "検査ランプが取得不可のスイッチからは合流できません" in guide
         csrf = re.search(r'name="csrf-token" content="([^"]+)"', guide).group(1)
         body = {"action": "merge_pr", "params": {"repo": "agent-ops", "number": 2,
                 "expected_head_sha": "b" * 40, "expected_base": "main"}, "ack": True}

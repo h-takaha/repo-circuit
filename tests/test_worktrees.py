@@ -32,10 +32,10 @@ def git(path, *args):
                           env=env, text=True, encoding="utf-8").stdout.strip()
 
 
-def commit(path, filename="tracked.txt", value="first"):
+def commit(path, filename="tracked.txt", value="first", *, message=None):
     (path / filename).write_text(value, encoding="utf-8")
     git(path, "add", filename)
-    git(path, "commit", "-qm", value)
+    git(path, "commit", "-qm", message or value)
     return git(path, "rev-parse", "HEAD")
 
 
@@ -119,7 +119,9 @@ def test_squash_receipt_requires_exact_actual_head_base_and_merge_reachability(l
     extra = tmp_path / "feat"
     git(dev, "worktree", "add", "-qb", "feat", str(extra))
     feature = commit(extra, "new.txt", "feature")
-    merged = commit(dev, "new.txt", "feature")  # squash相当の別履歴
+    # 同じ秒・親・内容・メッセージだと同じSHAになる。時刻に頼らず別履歴を作る。
+    merged = commit(dev, "new.txt", "feature", message="squashed feature")
+    assert feature != merged
     git(dev, "update-ref", "refs/remotes/origin/trunk", merged)
     evidence = RepoEvidence("trunk", merged, [pr(feature, merge=merged)])
     row = next(r for r in read_worktrees(root, "tool", evidence).rows if not r.is_primary)

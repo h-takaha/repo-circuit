@@ -13,7 +13,7 @@
       <span style="font-size:14px;font-weight:500;line-height:1.45">{{ '幹線に入りきった分岐や、GitHub にもう無い古い記録が残っています' if tidy else '片付け候補の分岐・追跡記録はありません' }}</span>
     </button>
     {% endif %}
-    <a class="cap" href="/repo/{{ repo_name|urlencode }}/worktrees">作業場所と残っているファイルを確認 →</a>
+    {% if not intro_demo %}<a class="cap" href="/repo/{{ repo_name|urlencode }}/worktrees">作業場所と残っているファイルを確認 →</a>{% endif %}
     <div class="kicker">部品トレイ · {{ view.name }} の付箋</div>
     {% for c in chips %}
     <button type="button" class="chipbtn {{ c.state }}" data-part="{{ c.part }}">
@@ -23,7 +23,7 @@
     {% else %}
     <p class="cap">まだ付箋はありません。</p>
     {% endfor %}
-    <a href="/tray?repo={{ view.name }}" style="font-size:13px;font-weight:500;padding:10px 0">付箋を貼る（起票）→</a>
+    {% if not intro_demo %}<a href="/tray?repo={{ view.name }}" style="font-size:13px;font-weight:500;padding:10px 0">付箋を貼る（起票）→</a>{% endif %}
   </aside>
 
   <section class="cmain">
@@ -33,7 +33,7 @@
         <span>ブレーカー: <span id="breaker-text">正常</span></span>
       </div>
     </div>
-    <p class="card status">{{ status }}</p>
+    <p class="card status">{% if intro_demo %}提案済みの変更と、用意済みの検査結果です。スイッチ #6 は失敗、#5 は合格の例です。部品を押して意味を読み、合流できるか確認します。{% else %}{{ status }}{% endif %}</p>
     <div class="board" style="max-width:100%">
       <div style="position:relative;width:{{ scene.width }}px;height:{{ scene.height }}px">
       <svg width="{{ scene.width }}" height="{{ scene.height }}" viewBox="0 0 {{ scene.width }} {{ scene.height }}" role="img" aria-label="{{ view.name }} の配線図">
@@ -52,8 +52,8 @@
         {% endfor %}
         {% for d in scene.dots %}<circle class="{{ d.cls }}" cx="{{ d.x }}" cy="{{ d.y }}" r="{{ d.r }}"></circle>{% endfor %}
         {% for t in scene.texts %}<text class="{{ t.cls }}" x="{{ t.x }}" y="{{ t.y }}">{{ t.t }}</text>{% endfor %}
-        <circle id="lamp" class="lamp" cx="{{ scene.lamp.x }}" cy="{{ scene.lamp.y }}" r="20"></circle>
-        <path class="fil" d="M{{ scene.lamp.x-10 }} {{ scene.lamp.y-10 }}L{{ scene.lamp.x+10 }} {{ scene.lamp.y+10 }}M{{ scene.lamp.x+10 }} {{ scene.lamp.y-10 }}L{{ scene.lamp.x-10 }} {{ scene.lamp.y+10 }}"></path>
+        {% if scene.lamp %}<circle id="lamp" class="lamp" cx="{{ scene.lamp.x }}" cy="{{ scene.lamp.y }}" r="20"></circle>
+        <path class="fil" d="M{{ scene.lamp.x-10 }} {{ scene.lamp.y-10 }}L{{ scene.lamp.x+10 }} {{ scene.lamp.y+10 }}M{{ scene.lamp.x+10 }} {{ scene.lamp.y-10 }}L{{ scene.lamp.x-10 }} {{ scene.lamp.y+10 }}"></path>{% endif %}
       </svg>
       {% for h in scene.hits %}<button type="button" class="hit" data-part="{{ h.part }}" aria-label="{{ h.label }}" title="{{ h.label }}" style="left:{{ h.x|round|int }}px;top:{{ h.y|round|int }}px;width:{{ h.w|round|int }}px;height:{{ h.h|round|int }}px"></button>{% endfor %}
       </div>
@@ -64,7 +64,7 @@
     <button type="button" class="btn ghost" data-part="sync">作業台を最新の幹線に揃える</button>
     <button type="button" class="btn" data-part="publish">変更を記録して本番まで届ける</button>
     {% endif %}
-    {% if pipeline %}
+    {% if pipeline and not intro_demo %}
     <section class="card pipe" aria-label="工程表">
       <div class="kicker">工程表 · 作業台 → GitHub → 本番</div>
       <table>
@@ -83,14 +83,16 @@
       <p class="cap">表示は最大8行です。進行中の作業を先に、合流済みは通常3件を表示します。現在残っている完了分岐が多いときは、8行の範囲内で合流済みの行が増えます。</p>
     </section>
     {% endif %}
+    {% if intro_demo %}<p class="cap">合流は幹線への取り込みです。本番反映（デプロイ）は別の段階です。次は <a href="/repo/practice-details">詳しい状態の回路</a> で、未送電や本番の位置を見られます。</p>{% endif %}
   </section>
 
   <aside class="card cpanel" id="panel" aria-live="polite">
     <div class="kicker">回路図の見方</div>
-    <h2>電気が流れる＝変更が本番に届く</h2>
-    <p>太い銅色の線が<b>幹線</b>（main）。右端の<b>本番ランプ</b>につながっています。下に垂れた配線が<b>分岐</b>（ブランチ）で、戻り口の<b>スイッチ</b>（プルリクエスト）を閉じると幹線に合流し、電気が本番まで届きます。</p>
-    <p>スイッチ横の<b>検査ランプ</b>が緑なら閉じてOK。危ない操作をしようとすると<b>ブレーカー</b>が落ちて止め、理由を教えます。</p>
-    <p>旗は、<b>本番はここまで</b>（稼働クローンの位置）と<b>作業台</b>（あなたの PC の開発フォルダ）です。同じ位置でも上下に分けて示します。</p>
+    <h2>合流と本番反映は、別の段階</h2>
+    <p>太い銅色の線が<b>幹線</b>（main）、下に分かれた配線が<b>分岐</b>（ブランチ）です。スイッチ（プルリクエスト）は変更を幹線へ取り込む提案で、<b>合流（マージ）</b>すると幹線が進みます。</p>
+    <p>回路の「スイッチを閉じる」は合流の比喩です。GitHubの <b>Close pull request</b> は合流せずに閉じる別の操作です。</p>
+    <p>検査が合格でも安全の保証ではありません。変更内容と動作も確認してから合流します。検査が失敗した操作は<b>ブレーカー</b>が止め、理由と次の行動を示します。</p>
+    {% if not intro_demo %}<p>合流後の<b>本番反映（デプロイ）</b>は別の仕組みが行います。旗は本番と作業台のコミット位置です。本番への到達と実際の画面を別途確認します。</p>{% endif %}
   </aside>
 </div>
 <script type="application/json" id="parts-data">{{ parts|tojson }}</script>

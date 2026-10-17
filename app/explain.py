@@ -48,7 +48,7 @@ def summary(view: RepoView) -> dict:
     if ready:
         parts.append(f"合流の準備ができたスイッチが{len(ready)}つ（検査ランプ緑）。")
         if nxt == "やることはありません":
-            nxt = f"スイッチ #{ready[0].number} を閉じる"
+            nxt = f"スイッチ #{ready[0].number} の変更内容を確認して合流する"
     if pending:
         parts.append(f"検査中のスイッチが{len(pending)}つ。")
         if nxt == "やることはありません":
@@ -152,7 +152,7 @@ def parts(view: RepoView) -> dict[str, dict]:
     out["bus"] = {
         "title": f"幹線 {view.default_branch}",
         "term": f"{view.default_branch}（本線・デフォルトブランチ）",
-        "body": "全員の土台になる配線。右端の本番ランプにつながっていて、ここに入った変更が本番に届きます。"
+        "body": "全員の土台になる配線。合流した変更を共有する本線です。本番への反映は別のデプロイ処理が行います。"
                 "幹線に直接はんだ付けはしません。必ず分岐で作業し、スイッチ経由で合流します。",
         "actions": [],
     }
@@ -160,7 +160,7 @@ def parts(view: RepoView) -> dict[str, dict]:
         "title": "本番ランプ",
         "term": f"稼働クローン C:\\lab\\run\\{r}",
         "body": ("幹線に届いた電気で光る、いま動いている本番のツール。"
-                 + ("このツールは自動デプロイ対象なので、幹線に合流した変更は数分以内に本番へ反映されます。"
+                 + ("このツールは自動デプロイ対象です。幹線への合流後、別の処理が本番への反映を試みます。到達と実際の画面を確認してください。"
                     if view.autodeploy else "自動デプロイ対象ではないので、本番への反映は手作業です。")
                  + "このアプリは本番フォルダには書き込みません。"),
         "actions": [],
@@ -269,15 +269,16 @@ def parts(view: RepoView) -> dict[str, dict]:
         }
     for pr in view.pulls:
         n = linked_issue(pr)
-        acts = [_act("merge_pr", "スイッチを閉じる（マージ）", r, number=pr.number,
+        acts = [_act("merge_pr", "合流する（マージ）", r, number=pr.number,
                      expected_head_sha=pr.head_sha, expected_base=pr.base),
-                _act("close_pr", "スイッチを外す（合流せずに閉じる）", r, danger=True, number=pr.number)]
+                _act("close_pr", "合流せずにPRを閉じる（Close pull request）", r, danger=True, number=pr.number)]
         out[f"pr:{pr.number}"] = {
             "title": f"スイッチ #{pr.number}「{pr.title}」",
             "term": "プルリクエスト",
             "body": (f"分岐 {pr.head} の変更を幹線に入れてよいか確認するスイッチ。検査ランプは {CI_WORD.get(pr.ci, pr.ci)}。"
                      + ("ショート（コンフリクト）しています。" if pr.mergeable_state == "dirty" else "")
-                     + (f"閉じると付箋 #{n} が自動で完了になります。" if n else "説明文に Fixes #番号 が無いので、付箋とはつながっていません。")),
+                     + (f"合流すると説明文の Fixes #{n} により付箋 #{n} が自動で完了になります。" if n else "説明文に Fixes #番号 が無いので、付箋とはつながっていません。")
+                     + "回路の『スイッチを閉じる』は合流の比喩です。GitHubの Close pull request は合流せずに提案を閉じる別の操作です。"),
             "url": pr.url,
             "actions": acts,
         }
@@ -285,9 +286,9 @@ def parts(view: RepoView) -> dict[str, dict]:
         out[f"led:{pr.number}"] = {
             "title": f"検査ランプ（{CI_WORD.get(pr.ci, pr.ci)}）",
             "term": "CI（自動チェック）",
-            "body": {"success": "自動テストが全部通りました。閉じても安全というサインです。",
+            "body": {"success": "取得した自動チェックは合格です。安全の保証ではないため、変更内容と実際の動作も確認してから合流します。",
                      "failure": "自動テストが失敗しています。GitHub で失敗ログを読み、分岐に修正をはんだ付けすると、ランプは自動で再検査されます。",
-                     "pending": "自動テストの実行中です。終わるまでスイッチは閉じられません。",
+                     "pending": "自動チェックの実行中です。終わるまで合流できません。",
                      "none": "この回路には自動テストが設定されていません。",
                      "unavailable": "GitHub の検査結果を取得できません（Checks API が 403 で、Actions の実行結果からも判定できない）。検査なしとは異なります。取得不可の間はブレーカーがアプリからの合流を止めます。"}.get(pr.ci, ""),
             "url": pr.url + "/checks" if pr.url else "",
@@ -400,7 +401,7 @@ def issue_part(view: RepoView, issue) -> dict:
     else:
         acts.append(_act("reopen_issue", "未完了に戻す", r, number=issue.number))
     where = {"unwired": "まだどの分岐にも差し込まれていない（未着手）",
-             "wired": f"分岐 {wire} に差し込まれている（対応中）" + (f"。スイッチ #{pr.number} が閉じると自動で完了" if pr else ""),
+             "wired": f"分岐 {wire} に差し込まれている（対応中）" + (f"。説明文に Fixes #{issue.number} があるスイッチ #{pr.number} が合流すると自動で完了" if pr and linked_issue(pr) == issue.number else ""),
              "done": "完了（クローズ済み）"}[state]
     return {
         "title": f"付箋 #{issue.number}「{issue.title}」",

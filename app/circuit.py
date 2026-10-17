@@ -48,7 +48,7 @@ def _main_x(i: int, n: int) -> float:
     return MAIN_LEFT + i * (MAIN_RIGHT - MAIN_LEFT) / (n - 1)
 
 
-def layout(view: RepoView) -> Scene:
+def layout(view: RepoView, *, show_runtime: bool = True) -> Scene:
     main = view.main_commits
     n_main = len(main)
     main_x = {c.sha: _main_x(i, n_main) for i, c in enumerate(main)}
@@ -97,11 +97,12 @@ def layout(view: RepoView) -> Scene:
         s.hits.append({"x": x - 12, "y": BUS_Y - 12, "w": 24, "h": 24, "part": f"commit:{c.sha}", "label": f"はんだ点 {c.headline}"})
     _markers(s, view, main_x)
 
-    # 本番ランプ
-    s.lamp = {"x": LAMP_X, "y": BUS_Y, "lit": view.local.run_exists or view.autodeploy, "auto": view.autodeploy}
-    s.texts.append({"x": LAMP_X, "y": BUS_Y + 44, "t": "本番", "cls": "lbl mid"})
-    s.texts.append({"x": LAMP_X, "y": BUS_Y + 62, "t": "自動デプロイ" if view.autodeploy else "手動デプロイ", "cls": "lblm mid"})
-    s.hits.append({"x": LAMP_X - 26, "y": BUS_Y - 26, "w": 52, "h": 96, "part": "lamp", "label": "本番ランプ"})
+    # 初回の紹介用デモは合流まで。本番は次の体験で表示する。
+    if show_runtime:
+        s.lamp = {"x": LAMP_X, "y": BUS_Y, "lit": view.local.run_exists or view.autodeploy, "auto": view.autodeploy}
+        s.texts.append({"x": LAMP_X, "y": BUS_Y + 44, "t": "本番", "cls": "lbl mid"})
+        s.texts.append({"x": LAMP_X, "y": BUS_Y + 62, "t": "自動デプロイ" if view.autodeploy else "手動デプロイ", "cls": "lblm mid"})
+        s.hits.append({"x": LAMP_X - 26, "y": BUS_Y - 26, "w": 52, "h": 96, "part": "lamp", "label": "本番ランプ"})
     return s
 
 

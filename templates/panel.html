@@ -1,6 +1,20 @@
 {% extends "base.html" %}
 {% block title %}配電盤 · repo-circuit{% endblock %}
 {% block content %}
+{% if showcase %}
+<section class="card demo-intro" id="demo-start">
+  <div class="kicker">はじめての方へ · 約3分</div>
+  <h1>変更を合流する流れを、回路図で試す</h1>
+  <p class="lead">用意した2つの変更提案で、検査結果を読み、合流できるか確認します。検査結果はサンプルです。このデモで実際のテストを実行することはありません。</p>
+  <ol>
+    <li><a href="/repo/practice-board?sel=pr:6">失敗した検査のスイッチ #6 を開く</a>。「合流する（マージ）」の「ツールから実行」で、止まる理由と次の行動を読みます。</li>
+    <li><a href="/repo/practice-board?sel=pr:5">検査に合格したスイッチ #5 を開く</a>。「合流する（マージ）」の「ツールから実行」で影響を読み、「実行する」を押します。幹線が進み、付箋 #12 が完了になります。</li>
+    <li><a href="/guide">凡例で GitHub の用語と照らし合わせる</a>。合流は幹線への取り込みで、本番反映（デプロイ）は次の段階です。</li>
+  </ol>
+  <p class="cap">やり直すときはサーバーを Ctrl+C で止め、同じコマンドで起動します。</p>
+</section>
+<p class="lead">次の体験: <a href="/repo/practice-details">詳しい状態の回路を見る</a>。未送電・古いコピー・本番の位置・作業場所の例を確認できます。</p>
+{% else %}
 <div>
   <h1>配電盤</h1>
   <p class="lead">全ツールの配線を1行ずつ並べています。赤いランプや錆びた配線がある回路が上に来ます。行を押すと回路図が開きます。</p>
@@ -8,7 +22,7 @@
 <div class="stats">
   <div class="card stat"><span class="cap">要注意の回路</span><span class="num" style="color:var(--red-d)">{{ alerts }}</span></div>
   <div class="card stat"><span class="cap">未接続の付箋（未着手）</span><span class="num">{{ unwired }}</span></div>
-  <div class="card stat"><span class="cap">閉じられるスイッチ（合流待ち）</span><span class="num" style="color:var(--green)">{{ ready }}</span></div>
+  <div class="card stat"><span class="cap">検査合格のスイッチ（合流候補）</span><span class="num" style="color:var(--green)">{{ ready }}</span></div>
   <div class="card stat"><span class="cap">この7日でよく落ちたブレーカー</span>
     {% if top_trip %}<span style="font-size:15px;font-weight:500">{{ top_trip[0] }} · {{ top_trip[1] }}回</span>{% else %}<span style="font-size:15px;font-weight:500">まだありません</span>{% endif %}
   </div>
@@ -44,4 +58,5 @@
   <p class="lead">回路（repo）が見つかりません。GITHUB_TOKEN と GITHUB_OWNER を確認してください。</p>
 {% endfor %}
 </div>
+{% endif %}
 {% endblock %}
